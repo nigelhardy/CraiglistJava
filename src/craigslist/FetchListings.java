@@ -1,7 +1,7 @@
 package craigslist;
 
-import java.util.ArrayList;
 import java.util.Date;
+import java.util.Vector;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -9,7 +9,10 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 public class FetchListings {
-	ArrayList<Listing> listings = new ArrayList<Listing>();
+	Vector<Listing> listings = new Vector<Listing>();
+	Vector<Listing> alert_listings = new Vector<Listing>();
+	float threshold = 1;
+	
 	public void get_listings(String url)
 	{
 		try {
@@ -41,8 +44,10 @@ public class FetchListings {
 		{
 			try 
 			{
-				listing.title = title.text();
-				listing.content = content.text().replace(content.select(".print-qrcode-label").text(), "").trim();
+				// Would be nice to save private dealer vs. stealership
+				// should make date actual date posted on craiglist, not retrieved (maybe have both)
+				listing.title = title.text().toLowerCase();
+				listing.content = content.text().replace(content.select(".print-qrcode-label").text(), "").trim().toLowerCase();
 				Elements attributes = listing_doc.select("p.attrgroup").select("span");
 				for(Element attribute : attributes)
 				{
@@ -81,31 +86,47 @@ public class FetchListings {
 	}
 	public void rank_listings()
 	{
-		
+		for(Listing listing : listings)
+		{
+			listing.determine_value();
+			if(listing.value > threshold)
+			{
+				if(save_listing(listing))
+				{
+					alert_listings.add(listing);
+				}
+			}
+		}
 	}
 	
-	public void save_listings()
+	public boolean save_listing(Listing listing)
 	{
+		// TODO: try to save new listing, if it is already saved then return false
+		// won't be entirely straightforward to check dups, reposts are common
+		// looking through every db value would be slow, but time saving for me
 		
-	}
-	public void filter_old()
-	{
-		
+		return true;
 	}
 	public void send_best()
 	{
-		
+		// TODO: send email with best listings
 	}
 	public static void main(String[] args) {
 		FetchListings f = new FetchListings();
 		f.get_listings("https://sfbay.craigslist.org/search/cta?sort=date&query=540i");
 		f.rank_listings();
-		f.filter_old();
 		f.send_best();
-		f.save_listings();
-		for(Listing listing : f.listings)
+		
+		Integer num_listings_print = 20000;
+		Integer counter = 0;
+		for(Listing listing : f.alert_listings)
 		{
-			System.out.println(listing.attr_odometer);
+			counter += 1;
+			if(counter > num_listings_print)
+			{
+				break;
+			}
+			System.out.println(listing.value + ": " + listing.title);
 		}
     }
 }
