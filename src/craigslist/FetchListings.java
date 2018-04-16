@@ -1,17 +1,52 @@
 package craigslist;
 
-import java.util.Date;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Vector;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.util.Properties;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
+
+import java.util.*;
+import javax.mail.*;
+import javax.mail.internet.*;
+
 public class FetchListings {
 	Vector<Listing> listings = new Vector<Listing>();
 	Vector<Listing> alert_listings = new Vector<Listing>();
-	float threshold = 1;
+	Map<String, String> config;
+	public FetchListings()
+	{
+		Scanner in;
+		try {
+			in = new Scanner(new FileReader("config/gmail-config.txt"));
+			while(in.hasNext())
+			{
+				String[] config_value = in.next().split("=");
+				
+				if(config_value.length == 2)
+				{
+					config.put(config_value[0], config_value[1]);
+				}
+			}
+			in.close();
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			System.out.println("Could not read config file.");
+		}
+		
+	}
 	
 	public void get_listings(String url)
 	{
@@ -24,31 +59,49 @@ public class FetchListings {
 				
 				for(Element a_elem : res_links) 
 				{
-					Document listing_doc = Jsoup.connect(a_elem.attr("href")).get();
-					create_listing(listing_doc);
+					String listing_url = a_elem.attr("href");
+					Document listing_doc = Jsoup.connect(listing_url).get();
+					create_listing(listing_doc, listing_url);
 					
 				}
 	        }
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
-			System.out.println(url);
+			System.out.println("Problem url: " + url);
 		}
 	}
-	public void create_listing(Document listing_doc)
+	public void create_listing(Document listing_doc, String listing_url)
 	{
 		Elements title = listing_doc.select("#titletextonly");
 		Elements content = listing_doc.select("#postingbody");
 		Listing listing = new Listing();
+		
+		if(listing_url.contains("/cto/"))
+		{
+			// cto is craiglist abrev for cars/trucks by owner
+			// ctd is dealership
+			// cta in search is all
+			listing.by_owner = true;
+		}
+		else
+		{
+			listing.by_owner = false;
+		}
+		
 		if(title.size() > 0)
 		{
 			try 
 			{
-				// Would be nice to save private dealer vs. stealership
-				// should make date actual date posted on craiglist, not retrieved (maybe have both)
 				listing.title = title.text().toLowerCase();
 				listing.content = content.text().replace(content.select(".print-qrcode-label").text(), "").trim().toLowerCase();
-				Elements attributes = listing_doc.select("p.attrgroup").select("span");
+				Elements attributes = listing_doc.select("p.attrgroup:gt(0)").select("span");
+				listing.attr_make_model = listing_doc.select("p.attrgroup:eq(0) span:eq(0)").text();
+								
+				DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
+				LocalDateTime formatDateTime = LocalDateTime.parse(listing_doc.select(".date[datetime]").attr("datetime"), formatter);
+				listing.date = formatDateTime;
+				
 				for(Element attribute : attributes)
 				{
 					String [] attr = attribute.text().split(":");
@@ -73,29 +126,18 @@ public class FetchListings {
 					listing.price = -1;
 				}
 				
-				listing.date = new Date();
 				listing.num_images = listing_doc.select(".thumb").size();
-				this.listings.add(listing);
+				if(listing.determine_value() >= 0)
+				{
+					this.listings.add(listing);
+				}
+				
 			}
 			catch (Exception e) {
 				// TODO: handle exception
 				System.out.println("Couldn't parse listing.");
 			}
 			
-		}
-	}
-	public void rank_listings()
-	{
-		for(Listing listing : listings)
-		{
-			listing.determine_value();
-			if(listing.value > threshold)
-			{
-				if(save_listing(listing))
-				{
-					alert_listings.add(listing);
-				}
-			}
 		}
 	}
 	
@@ -107,19 +149,31 @@ public class FetchListings {
 		
 		return true;
 	}
-	public void send_best()
+	public void send_best() throws FileNotFoundException
 	{
-		// TODO: send email with best listings
+		
+		String USER_NAME = config.get("username");  // GMail user name
+	    String PASSWORD = config.get("password"); // GMail password
+	    String RECIPIENT = config.get("recipient");
+		
+	    // make values are not null
+	    // get top and format a email with links to posts
+	    // profit
+		
 	}
 	public static void main(String[] args) {
 		FetchListings f = new FetchListings();
 		f.get_listings("https://sfbay.craigslist.org/search/cta?sort=date&query=540i");
-		f.rank_listings();
-		f.send_best();
+		try {
+			f.send_best();
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		
 		Integer num_listings_print = 20000;
 		Integer counter = 0;
-		for(Listing listing : f.alert_listings)
+		for(Listing listing : f.listings)
 		{
 			counter += 1;
 			if(counter > num_listings_print)
