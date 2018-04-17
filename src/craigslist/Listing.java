@@ -1,6 +1,11 @@
 package craigslist;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 
 public class Listing {
 	LocalDateTime date;
@@ -16,11 +21,76 @@ public class Listing {
 	String url = "";
 	String region = "";
 	Float value = 0.0f;
-	
+	public Listing(Document listing_doc, String listing_url, String region)
+	{
+		Elements title = listing_doc.select("#titletextonly");
+		Elements content = listing_doc.select("#postingbody");
+		this.region = region;
+		if(listing_url.contains("/cto/"))
+		{
+			// cto is craiglist abrev for cars/trucks by owner
+			// ctd is dealership
+			// cta in search is all
+			this.by_owner = true;
+		}
+		else
+		{
+			this.by_owner = false;
+		}
+		
+		if(title.size() > 0)
+		{
+			try 
+			{
+				this.title = title.text().toLowerCase();
+				this.content = content.text().replace(content.select(".print-qrcode-label").text(), "").trim().toLowerCase();
+				Elements attributes = listing_doc.select("p.attrgroup:gt(0)").select("span");
+				this.attr_make_model = listing_doc.select("p.attrgroup span").get(0).text();
+				this.url = listing_url;		
+				DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
+				LocalDateTime formatDateTime = LocalDateTime.parse(listing_doc.select(".date[datetime]").attr("datetime"), formatter);
+				this.date = formatDateTime;
+				
+				for(Element attribute : attributes)
+				{
+					String [] attr = attribute.text().split(":");
+					if(attr[0].toLowerCase().equals("transmission"))
+					{
+						this.attr_transmission = attr[1].trim();
+					}
+					if(attr[0].toLowerCase().equals("title status"))
+					{
+						this.attr_title_status = attr[1].trim();
+					}
+					if(attr[0].toLowerCase().equals("odometer"))
+					{
+						this.attr_odometer = Integer.parseInt(attr[1].trim());
+					}
+				}
+				try
+				{
+					this.price = Float.parseFloat(listing_doc.select(".price").text().replace("$",""));
+				}
+				catch (Exception e) {
+					this.price = -1f;
+				}
+				
+				this.num_images = listing_doc.select(".thumb").size();
+				if(this.determine_value() >= 0)
+				{
+					//save_listing(this);
+				}
+				
+			}
+			catch (Exception e) {
+				System.out.println("Couldn't parse listing.");
+			}
+			
+		}
+	}
 	public float determine_value()
 	{
 		String model = "540";
-		
 		
 		String [] title_dq = {"540ia", "automatic", "auto", "mechanic special", "parts"};
 		String [] unwanted_models = {"325i", "328i", "330i", "525i", "530i", "535i", "550i", "740i", "X3", "X5", "X7",
@@ -32,9 +102,7 @@ public class Listing {
 		
 		int min_year_avoid = 1990;
 		int max_year_avoid = 2018;
-		
-		String[] short_years_desired = {"99", "00", "01", "02", "03"};
-		
+				
 		// Going to make this dirty and not very dynamic, don't judge
 		String [] man_trans_keys = {"manual transmission", "manual", "6 speed", "6-speed", "6 speed transmission", "six speed"};
 		String [] msport_keys = {"m sport", "m-sport", "msport", "sport"};

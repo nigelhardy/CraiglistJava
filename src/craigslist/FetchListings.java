@@ -1,15 +1,8 @@
 package craigslist;
 
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.Vector;
-
 import java.io.IOException;
-import java.io.Reader;
-import java.util.Properties;
+import java.util.Vector;
 
 import org.jsoup.Connection.Response;
 import org.jsoup.Jsoup;
@@ -17,49 +10,35 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
-
 import java.util.*;
-import javax.mail.*;
-import javax.mail.internet.*;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.text.similarity.*;
 
 public class FetchListings {
 	public static int SIM_THRESH = 10;
-	ListingDB db;
-	Vector<Listing> listings = new Vector<Listing>();
-	Vector<Listing> alert_listings = new Vector<Listing>();
-	Map<String, String> config = new HashMap<String, String>();
-	LevenshteinDistance lev_dist = null;
-	public FetchListings()
+	static ListingDB db;
+	static Vector<Listing> listings = new Vector<Listing>();
+	static Vector<SearchPage> search_pages = new Vector<SearchPage>();
+	static Vector<String> listing_urls = new Vector<String>();
+	
+	static LevenshteinDistance lev_dist = null;
+	
+	static void build_urls()
 	{
-		read_config();
+		
+	}
+	public static void init()
+	{
 		db = new ListingDB();
 		lev_dist = new LevenshteinDistance(100);
 	}
-	public void read_config()
+	public FetchListings()
 	{
-		// read config
-		Scanner in;
-		try {
-			in = new Scanner(new FileReader("config/gmail-config.txt"));
-			while(in.hasNext())
-			{
-				String[] config_value = in.next().split("=");
-				
-				if(config_value.length == 2)
-				{
-					config.put(config_value[0], config_value[1]);
-				}
-			}
-			in.close();
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-			System.out.println("Could not read config file.");
-		}
+		
 	}
-	public void get_listings(String region, Integer page, String query)
+	
+	public static void get_listings(String region, String query, Integer page)
 	{
 		String url = "https://" + region + ".craigslist.org/search/cta?s=" + page.toString() + "&sort=date&query=" + query;
 		System.out.println("Getting " + url);
@@ -83,20 +62,7 @@ public class FetchListings {
 				for(Element a_elem : res_links) 
 				{
 					String listing_url = a_elem.attr("href");
-					Document listing_doc = null;
-					String[] url_parts = listing_url.split("/");
-					File listing_page = new File("test_pages/" + url_parts[url_parts.length-1]);
-					if(listing_page.exists())
-					{
-						listing_doc = Jsoup.parse(listing_page, "UTF-8");
-					}
-					else
-					{
-						listing_doc = Jsoup.connect(listing_url).get();
-						downloadPage(listing_doc, listing_url);
-					}
-					create_listing(listing_doc, listing_url, region);
-					
+					listing_urls.add(listing_url);
 				}				
 	        }
 		} catch (Exception e) {
@@ -104,156 +70,40 @@ public class FetchListings {
 			System.out.println("Exception when traversing url: " + url);
 		}
 	}
-	public void create_listing(Document listing_doc, String listing_url, String region)
+	public static void parse_listing(String listing_url) throws Exception
 	{
-		Elements title = listing_doc.select("#titletextonly");
-		Elements content = listing_doc.select("#postingbody");
-		Listing listing = new Listing();
-		listing.region = region;
-		if(listing_url.contains("/cto/"))
+		Document listing_doc = null;
+		String[] url_parts = listing_url.split("/");
+		File listing_page = new File("test_pages/" + url_parts[url_parts.length-1]);
+		if(listing_page.exists())
 		{
-			// cto is craiglist abrev for cars/trucks by owner
-			// ctd is dealership
-			// cta in search is all
-			listing.by_owner = true;
+			listing_doc = Jsoup.parse(listing_page, "UTF-8");
 		}
 		else
 		{
-			listing.by_owner = false;
+			listing_doc = Jsoup.connect(listing_url).get();
+			downloadPage(listing_doc, listing_url);
 		}
-		
-		if(title.size() > 0)
-		{
-			try 
-			{
-				listing.title = title.text().toLowerCase();
-				listing.content = content.text().replace(content.select(".print-qrcode-label").text(), "").trim().toLowerCase();
-				Elements attributes = listing_doc.select("p.attrgroup:gt(0)").select("span");
-				listing.attr_make_model = listing_doc.select("p.attrgroup span").get(0).text();
-				listing.url = listing_url;		
-				DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
-				LocalDateTime formatDateTime = LocalDateTime.parse(listing_doc.select(".date[datetime]").attr("datetime"), formatter);
-				listing.date = formatDateTime;
-				
-				for(Element attribute : attributes)
-				{
-					String [] attr = attribute.text().split(":");
-					if(attr[0].toLowerCase().equals("transmission"))
-					{
-						listing.attr_transmission = attr[1].trim();
-					}
-					if(attr[0].toLowerCase().equals("title status"))
-					{
-						listing.attr_title_status = attr[1].trim();
-					}
-					if(attr[0].toLowerCase().equals("odometer"))
-					{
-						listing.attr_odometer = Integer.parseInt(attr[1].trim());
-					}
-				}
-				try
-				{
-					listing.price = Float.parseFloat(listing_doc.select(".price").text().replace("$",""));
-				}
-				catch (Exception e) {
-					listing.price = -1f;
-				}
-				
-				listing.num_images = listing_doc.select(".thumb").size();
-				if(listing.determine_value() >= 0)
-				{
-					save_listing(listing);
-				}
-				
-			}
-			catch (Exception e) {
-				System.out.println("Couldn't parse listing.");
-			}
-			
-		}
+		String region = listing_url.split("//")[1].split("\\.")[0];
+		Listing listing = new Listing(listing_doc, listing_url, region);
+		save_listing(listing);
 	}
-	
-	public boolean save_listing(Listing new_listing)
+	public static boolean save_listing(Listing new_listing)
 	{
-		for(Listing listing : listings)
-		{
-			int temp_ld = lev_dist.apply(new_listing.content, listing.content);
-			if(temp_ld < SIM_THRESH && temp_ld != -1)
-			{
-				return false;
-			}
-		}
+//		Iterator<Listing> iter = listings.iterator();
+//		while(iter.hasNext())
+//		{
+//			Listing listing = iter.next();
+//			int temp_ld = lev_dist.apply(new_listing.content, listing.content);
+//			if(temp_ld < SIM_THRESH && temp_ld != -1)
+//			{
+//				return false;
+//			}
+//		}
 		db.save_listing(new_listing);
 		listings.add(new_listing);
 		return true;
 	}
-	public void send_best()
-	{
-		
-		String USER_NAME = config.get("username");  // GMail user name
-	    String PASSWORD = config.get("password"); // GMail password
-	    String[] RECIPIENT = {config.get("recipient")};
-		
-	    if(USER_NAME != null && PASSWORD != null && RECIPIENT != null)
-	    {
-	    	String subject = "Found new 540i posting(s) on Craigslist";
-	        String body = "";
-	        for(Listing listing : listings)
-	        {
-	        	body += listing.value + ": " + listing.title + " - " + listing.url;
-	        	body += "\n";
-	        }
-	        sendFromGMail(USER_NAME, PASSWORD, RECIPIENT, subject, body);
-	    }
-	    else
-	    {
-	    	System.out.println("Need to have config variables set to send email.");
-	    }
-		
-	}
-	
-	private static void sendFromGMail(String from, String pass, String[] to, String subject, String body) {
-		// credit goes to Bill the Lizard
-		// https://stackoverflow.com/questions/46663/how-can-i-send-an-email-by-java-application-using-gmail-yahoo-or-hotmail
-        Properties props = System.getProperties();
-        String host = "smtp.gmail.com";
-        props.put("mail.smtp.starttls.enable", "true");
-        props.put("mail.smtp.host", host);
-        props.put("mail.smtp.user", from);
-        props.put("mail.smtp.password", pass);
-        props.put("mail.smtp.port", "587");
-        props.put("mail.smtp.auth", "true");
-
-        Session session = Session.getDefaultInstance(props);
-        MimeMessage message = new MimeMessage(session);
-
-        try {
-            message.setFrom(new InternetAddress(from));
-            InternetAddress[] toAddress = new InternetAddress[to.length];
-
-            // To get the array of addresses
-            for( int i = 0; i < to.length; i++ ) {
-                toAddress[i] = new InternetAddress(to[i]);
-            }
-
-            for( int i = 0; i < toAddress.length; i++) {
-                message.addRecipient(Message.RecipientType.TO, toAddress[i]);
-            }
-
-            message.setSubject(subject);
-            message.setText(body);
-            Transport transport = session.getTransport("smtp");
-            transport.connect(host, from, pass);
-            transport.sendMessage(message, message.getAllRecipients());
-            transport.close();
-        }
-        catch (AddressException ae) {
-            ae.printStackTrace();
-        }
-        catch (MessagingException me) {
-            me.printStackTrace();
-        }
-    }
 	public void print_listings(int max)
 	{
 		Integer num_listings_print = max;
@@ -268,37 +118,124 @@ public class FetchListings {
 			System.out.println(listing.value + ": " + listing.title + " - " + listing.region);
 		}
 	}
-	public void downloadPage(Document doc, String url) throws Exception {
+	public static void downloadPage(Document doc, String url) throws Exception {
 		String[] url_parts = url.split("/");
         final File f = new File("test_pages/" + url_parts[url_parts.length-1]);
         FileUtils.writeStringToFile(f, doc.outerHtml(), "UTF-8");
     }
-	public void downloadPageSearch(Document doc, String url, String region, Integer page) throws Exception {
+	public static void downloadPageSearch(Document doc, String url, String region, Integer page) throws Exception {
         final File f = new File("test_pages/" + region + page.toString());
         FileUtils.writeStringToFile(f, doc.outerHtml(), "UTF-8");
     }
-	public static void get_all_listings()
-	{
-		String[] regions = {"monterey", "losangeles", "sfbay", "santabarbara", "orangecounty", "sacramento"};
-		String[] queries = {"540i"};
-		FetchListings f = new FetchListings();
-		int num_pages = 3;
+	public static void get_all_listings(String[] regions, String[] queries, int pages)
+	{		
+		// create vector of urls to search
 		for(String region : regions)
 		{
 			for(String query : queries)
 			{
-				for(int i = 0; i < num_pages; i++)
+				for(int i = 0; i < pages; i++)
 				{
-					f.get_listings(region, i, query);
+					search_pages.add(new SearchPage(region, query, i));
 				}
 			}
 		}
-		
+		// create vector of threads to parse each search page
+		Vector<Thread> threads = new Vector<Thread>();
+		for(SearchPage sp : search_pages)
+		{
+			Runnable obj = new Runnable()
+			{
+				public void run()
+				{
+					SearchPage sp = search_pages.remove(0);
+					get_listings(sp.region, sp.query, sp.page);
+				}
+			};
+			threads.addElement(new Thread(obj));
+		}
+		Vector<Thread> active_threads = new Vector<Thread>();
+		while(threads.size() > 0 || active_threads.size() > 0)
+		{
+			// remove dead threads
+			Iterator<Thread> thread_iter = active_threads.iterator();
+			while(thread_iter.hasNext())
+			{
+				Thread temp_thread = thread_iter.next();
+				if(!temp_thread.isAlive())
+				{
+					thread_iter.remove();
+				}
+			}
+			// run at most four threads at a time (not including main thread)
+			while(active_threads.size() < 4 && threads.size() > 0)
+			{
+				Thread temp_thread = threads.remove(0);
+				active_threads.add(temp_thread);
+				temp_thread.start();
+			}
+		}
 		//f.send_best();
-		f.print_listings(100);
-		
+		//f.print_listings(100);	
+	}
+	public static void parse_listings()
+	{
+//		// create vector of threads to parse each search page
+		Vector<Thread> threads = new Vector<Thread>();
+		for(String _listing_url : listing_urls)
+		{
+			Runnable obj = new Runnable()
+			{
+				public void run()
+				{
+					if(listing_urls.size() > 0)
+					{
+						String listing_url = listing_urls.remove(0);
+						try {
+							parse_listing(listing_url);
+						} catch (Exception e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+					}
+					
+				}
+			};
+			threads.addElement(new Thread(obj));
+		}
+		Vector<Thread> active_threads = new Vector<Thread>();
+		while(threads.size() > 0 || active_threads.size() > 0)
+		{
+			// remove dead threads
+			Iterator<Thread> thread_iter = active_threads.iterator();
+			while(thread_iter.hasNext())
+			{
+				Thread temp_thread = thread_iter.next();
+				if(!temp_thread.isAlive())
+				{
+					thread_iter.remove();
+				}
+			}
+			// run at most four threads at a time (not including main thread)
+			while(active_threads.size() < 4 && threads.size() > 0)
+			{
+				Thread temp_thread = threads.remove(0);
+				active_threads.add(temp_thread);
+				temp_thread.start();
+			}
+		}
 	}
 	public static void main(String[] args) {
-		get_all_listings();
+		String[] regions = {"monterey", "losangeles", "sfbay", "santabarbara", "orangecounty", "sacramento"};
+		String[] queries = {"540i"};
+		init();
+		get_all_listings(regions, queries, 1);
+		System.out.println("Size: " + listing_urls.size());
+//		for (int i = 0; i < 20; i++) {
+//			System.out.println(listing_urls.get(i));
+//		}
+		parse_listings();
+
+		System.out.println("Size: " + listing_urls.size());
     }
 }

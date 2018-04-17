@@ -41,7 +41,7 @@ public class ListingDB {
 		stmt.executeUpdate(sql);
 		stmt.close();
 	}
-	public boolean save_listing(Listing listing)
+	public synchronized boolean save_listing(Listing listing)
 	{
 		try
 		{
