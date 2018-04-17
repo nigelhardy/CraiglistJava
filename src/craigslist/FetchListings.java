@@ -27,12 +27,20 @@ import org.apache.commons.text.similarity.*;
 
 public class FetchListings {
 	public static int SIM_THRESH = 10;
+	ListingDB db;
 	Vector<Listing> listings = new Vector<Listing>();
 	Vector<Listing> alert_listings = new Vector<Listing>();
 	Map<String, String> config = new HashMap<String, String>();
 	LevenshteinDistance lev_dist = null;
 	public FetchListings()
 	{
+		read_config();
+		db = new ListingDB();
+		lev_dist = new LevenshteinDistance(100);
+	}
+	public void read_config()
+	{
+		// read config
 		Scanner in;
 		try {
 			in = new Scanner(new FileReader("config/gmail-config.txt"));
@@ -47,13 +55,10 @@ public class FetchListings {
 			}
 			in.close();
 		} catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 			System.out.println("Could not read config file.");
 		}
-		lev_dist = new LevenshteinDistance(100);
 	}
-	
 	public void get_listings(String region, Integer page, String query)
 	{
 		String url = "https://" + region + ".craigslist.org/search/cta?s=" + page.toString() + "&sort=date&query=" + query;
@@ -95,9 +100,8 @@ public class FetchListings {
 				}				
 	        }
 		} catch (Exception e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
-			System.out.println("Problem url: " + url);
+			System.out.println("Exception when traversing url: " + url);
 		}
 	}
 	public void create_listing(Document listing_doc, String listing_url, String region)
@@ -125,7 +129,7 @@ public class FetchListings {
 				listing.title = title.text().toLowerCase();
 				listing.content = content.text().replace(content.select(".print-qrcode-label").text(), "").trim().toLowerCase();
 				Elements attributes = listing_doc.select("p.attrgroup:gt(0)").select("span");
-				listing.attr_make_model = listing_doc.select("p.attrgroup:eq(0) span:eq(0)").text();
+				listing.attr_make_model = listing_doc.select("p.attrgroup span").get(0).text();
 				listing.url = listing_url;		
 				DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
 				LocalDateTime formatDateTime = LocalDateTime.parse(listing_doc.select(".date[datetime]").attr("datetime"), formatter);
@@ -152,7 +156,7 @@ public class FetchListings {
 					listing.price = Float.parseFloat(listing_doc.select(".price").text().replace("$",""));
 				}
 				catch (Exception e) {
-					listing.price = -1;
+					listing.price = -1f;
 				}
 				
 				listing.num_images = listing_doc.select(".thumb").size();
@@ -163,7 +167,6 @@ public class FetchListings {
 				
 			}
 			catch (Exception e) {
-				// TODO: handle exception
 				System.out.println("Couldn't parse listing.");
 			}
 			
@@ -172,9 +175,6 @@ public class FetchListings {
 	
 	public boolean save_listing(Listing new_listing)
 	{
-		// TODO: try to save new listing, if it is already saved then return false
-		// won't be entirely straightforward to check dups, reposts are common
-		// looking through every db value would be slow, but time saving for me
 		for(Listing listing : listings)
 		{
 			int temp_ld = lev_dist.apply(new_listing.content, listing.content);
@@ -183,7 +183,7 @@ public class FetchListings {
 				return false;
 			}
 		}
-		
+		db.save_listing(new_listing);
 		listings.add(new_listing);
 		return true;
 	}
@@ -290,9 +290,7 @@ public class FetchListings {
 				for(int i = 0; i < num_pages; i++)
 				{
 					f.get_listings(region, i, query);
-					break;
 				}
-				break;
 			}
 		}
 		
