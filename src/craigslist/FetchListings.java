@@ -24,7 +24,7 @@ import javax.mail.internet.*;
 public class FetchListings {
 	Vector<Listing> listings = new Vector<Listing>();
 	Vector<Listing> alert_listings = new Vector<Listing>();
-	Map<String, String> config;
+	Map<String, String> config = new HashMap<String, String>();
 	public FetchListings()
 	{
 		Scanner in;
@@ -97,7 +97,7 @@ public class FetchListings {
 				listing.content = content.text().replace(content.select(".print-qrcode-label").text(), "").trim().toLowerCase();
 				Elements attributes = listing_doc.select("p.attrgroup:gt(0)").select("span");
 				listing.attr_make_model = listing_doc.select("p.attrgroup:eq(0) span:eq(0)").text();
-								
+				listing.url = listing_url;		
 				DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
 				LocalDateTime formatDateTime = LocalDateTime.parse(listing_doc.select(".date[datetime]").attr("datetime"), formatter);
 				listing.date = formatDateTime;
@@ -154,13 +154,69 @@ public class FetchListings {
 		
 		String USER_NAME = config.get("username");  // GMail user name
 	    String PASSWORD = config.get("password"); // GMail password
-	    String RECIPIENT = config.get("recipient");
+	    String[] RECIPIENT = {config.get("recipient")};
 		
-	    // make values are not null
+	    if(USER_NAME != null && PASSWORD != null && RECIPIENT != null)
+	    {
+	    	String subject = "Found new 540i posting(s) on Craigslist";
+	        String body = "";
+	        for(Listing listing : listings)
+	        {
+	        	body += listing.value + ": " + listing.title + " - " + listing.url;
+	        	body += "\n";
+	        }
+	        sendFromGMail(USER_NAME, PASSWORD, RECIPIENT, subject, body);
+	    }
+	    else
+	    {
+	    	System.out.println("Need to have config variables set to send email.");
+	    }
+	    	    
 	    // get top and format a email with links to posts
 	    // profit
 		
 	}
+	
+	private static void sendFromGMail(String from, String pass, String[] to, String subject, String body) {
+        Properties props = System.getProperties();
+        String host = "smtp.gmail.com";
+        props.put("mail.smtp.starttls.enable", "true");
+        props.put("mail.smtp.host", host);
+        props.put("mail.smtp.user", from);
+        props.put("mail.smtp.password", pass);
+        props.put("mail.smtp.port", "587");
+        props.put("mail.smtp.auth", "true");
+
+        Session session = Session.getDefaultInstance(props);
+        MimeMessage message = new MimeMessage(session);
+
+        try {
+            message.setFrom(new InternetAddress(from));
+            InternetAddress[] toAddress = new InternetAddress[to.length];
+
+            // To get the array of addresses
+            for( int i = 0; i < to.length; i++ ) {
+                toAddress[i] = new InternetAddress(to[i]);
+            }
+
+            for( int i = 0; i < toAddress.length; i++) {
+                message.addRecipient(Message.RecipientType.TO, toAddress[i]);
+            }
+
+            message.setSubject(subject);
+            message.setText(body);
+            Transport transport = session.getTransport("smtp");
+            transport.connect(host, from, pass);
+            transport.sendMessage(message, message.getAllRecipients());
+            transport.close();
+        }
+        catch (AddressException ae) {
+            ae.printStackTrace();
+        }
+        catch (MessagingException me) {
+            me.printStackTrace();
+        }
+    }
 	public static void main(String[] args) {
 		FetchListings f = new FetchListings();
 		f.get_listings("https://sfbay.craigslist.org/search/cta?sort=date&query=540i");
