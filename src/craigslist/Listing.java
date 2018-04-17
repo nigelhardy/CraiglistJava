@@ -9,6 +9,7 @@ public class Listing {
 	String attr_title_status;
 	String attr_make_model;
 	String url;
+	String region;
 	Integer attr_odometer;
 	LocalDateTime date;
 	Integer num_images;
