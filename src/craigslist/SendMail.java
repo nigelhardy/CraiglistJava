@@ -15,6 +15,11 @@ import javax.mail.internet.*;
 public class SendMail {
 	Map<String, String> config = new HashMap<String, String>();
 	
+	public SendMail()
+	{
+		read_config();
+	}
+	
 	public void read_config()
 	{
 		// read config

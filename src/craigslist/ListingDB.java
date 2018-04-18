@@ -1,11 +1,17 @@
 package craigslist;
 
 import java.sql.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Vector;
+
 import org.apache.commons.text.similarity.*;
 
 public class ListingDB {
 	private Connection c = null;
 	LevenshteinDistance lev_dist = null;
+	public static int LEV_DIST_THRESH_PER = 8;
+	Vector<Listing> db_listings = new Vector<Listing>();
 	public ListingDB()
 	{	      
 		lev_dist = new LevenshteinDistance(100);
@@ -13,6 +19,7 @@ public class ListingDB {
 			Class.forName("org.sqlite.JDBC");
 			c = DriverManager.getConnection("jdbc:sqlite:sqlite/listing.db");
 			create_listing_table();
+			load_existing();
 	  	} catch ( Exception e ) {
 			System.err.println( e.getClass().getName() + ": " + e.getMessage() );
 			System.exit(0);
@@ -40,6 +47,30 @@ public class ListingDB {
 						");";
 		stmt.executeUpdate(sql);
 		stmt.close();
+	}
+	public void load_existing() throws SQLException
+	{
+		String sql = "SELECT * FROM Listings";
+		PreparedStatement stmt = c.prepareStatement(sql);
+		ResultSet rs = stmt.executeQuery();
+		while(rs.next()){
+			Listing listing = new Listing();
+			listing.title = rs.getString("title");
+			listing.content = rs.getString("content");
+			DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+			listing.date = LocalDateTime.parse(rs.getString("date"), formatter);
+			listing.attr_make_model = rs.getString("attr_make_model");
+			listing.attr_odometer = rs.getInt("attr_odometer");
+			listing.num_images = rs.getInt("num_images");
+			if(rs.getInt("by_owner") == 1) { listing.by_owner = true; } else {listing.by_owner = false; }
+			listing.price = rs.getFloat("price");
+			listing.region = rs.getString("region");
+			listing.url = rs.getString("url");
+			listing.value = rs.getFloat("value");
+			db_listings.add(listing);
+		}
+		return;
+		
 	}
 	public synchronized boolean save_listing(Listing listing)
 	{
@@ -70,6 +101,7 @@ public class ListingDB {
 			stmt.setFloat(13, listing.value);
 			stmt.executeUpdate();
 			stmt.close();
+			db_listings.add(listing);
 			return true;
 		}
 		catch (SQLException e) {
@@ -79,16 +111,15 @@ public class ListingDB {
 		
 		return false;
 	}
-	public boolean is_unique(Listing listing) throws SQLException
+	public synchronized boolean is_unique(Listing listing) throws SQLException
 	{
-		String sql = "SELECT * FROM Listings WHERE title LIKE ?";
-		PreparedStatement stmt = c.prepareStatement(sql);
-		stmt.setString(1, listing.title);
-		ResultSet rs = stmt.executeQuery();
-		while(rs.next()){
-			String content = rs.getString("content");
-			int temp_ld = lev_dist.apply(content, listing.content);
-			if(temp_ld != -1 && (temp_ld < 8 && content.length() > 100) || (temp_ld < 3 && content.length() < 100))
+		// filters out listing that are slightly different reposts
+		for(Listing db_listing : db_listings)
+		{
+			Integer ld = lev_dist.apply(db_listing.content, listing.content);
+			Integer threshold =  (int) Math.max(LEV_DIST_THRESH_PER, LEV_DIST_THRESH_PER * Math.min(db_listing.content.length(), listing.content.length()) / 50f);
+			
+			if((ld < threshold && ld != -1) || (db_listing.title.equals(listing.title) && db_listing.title.length() > 30))
 			{
 				return false;
 			}

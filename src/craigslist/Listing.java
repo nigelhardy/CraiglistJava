@@ -21,6 +21,10 @@ public class Listing {
 	String url = "";
 	String region = "";
 	Float value = 0.0f;
+	public Listing()
+	{
+		
+	}
 	public Listing(Document listing_doc, String listing_url, String region)
 	{
 		Elements title = listing_doc.select("#titletextonly");
@@ -92,7 +96,7 @@ public class Listing {
 	{
 		String model = "540";
 		
-		String [] title_dq = {"540ia", "automatic", "auto", "mechanic special", "parts"};
+		String [] title_dq = {"540ia", "automatic", "auto", "mechanic special", "parts", "part out", "part-out"};
 		String [] unwanted_models = {"325i", "328i", "330i", "525i", "530i", "535i", "550i", "740i", "X3", "X5", "X7",
 				"mercedes", "acura", "nissan", "volkswagen", "honda", "toyota", "lexus", "audi", "scion", "porsche"};
 		String [] content_dq = {"540ia", "auto transmission", "automatic transmission", "auto trans", "parting out", "not running"};
@@ -107,12 +111,22 @@ public class Listing {
 		String [] man_trans_keys = {"manual transmission", "manual", "6 speed", "6-speed", "6 speed transmission", "six speed"};
 		String [] msport_keys = {"m sport", "m-sport", "msport", "sport"};
 		
-		String [] bad = {"salvage title", "salvage", "oil leak", "leaking", "needs smog", "rebuild", "cracked windshield"};
+		String [] bad = {"salvage title", "salvage", "oil leak", "leaking", "needs smog", "rebuild", 
+				"cracked windshield", "as is", "needs work", "needs tlc", "non op"};
 		
 		if(attr_transmission.equals("automatic"))
 		{
 			value = -1f;
 			return value;
+		}
+		if(attr_odometer > 150000)
+		{
+			value = -1f;
+			return value;
+		}
+		else if(attr_odometer > 100000)
+		{
+			value -= .5f;
 		}
 		
 		if(!title.contains(model) && !attr_make_model.contains(model))
@@ -180,7 +194,7 @@ public class Listing {
 		{
 			if(title.contains(i.toString()) || attr_make_model.contains(i.toString()))
 			{
-				value += 1;
+				value += 2;
 				break;
 			}
 			Integer short_year = i;
@@ -199,7 +213,7 @@ public class Listing {
 			}
 			if(title.contains(short_year_str) || attr_make_model.contains(short_year_str))
 			{
-				value += 1;
+				value += 2;
 				break;
 			}
 		}
@@ -207,7 +221,7 @@ public class Listing {
 		{
 			if(title.contains(key) || content.contains(key))
 			{
-				value += 1;
+				value += 2;
 				break;
 			}
 		}
@@ -215,7 +229,7 @@ public class Listing {
 		{
 			if(title.contains(key) || content.contains(key))
 			{
-				value += 1;
+				value += 2;
 				break;
 			}
 		}
@@ -225,6 +239,10 @@ public class Listing {
 			{
 				value -= .5f;
 			}
+		}
+		if(attr_title_status.equals("salvage"))
+		{
+			value -= .5f;
 		}
 		return value;
 	}

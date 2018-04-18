@@ -16,12 +16,12 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.text.similarity.*;
 
 public class FetchListings {
-	public static int SIM_THRESH = 10;
+	static int MAX_THREADS = 8;
 	static ListingDB db;
 	static Vector<Listing> listings = new Vector<Listing>();
 	static Vector<SearchPage> search_pages = new Vector<SearchPage>();
 	static Vector<String> listing_urls = new Vector<String>();
-	
+	static SendMail gmail = null;
 	static LevenshteinDistance lev_dist = null;
 	
 	static void build_urls()
@@ -32,6 +32,7 @@ public class FetchListings {
 	{
 		db = new ListingDB();
 		lev_dist = new LevenshteinDistance(100);
+		gmail = new SendMail();
 	}
 	public FetchListings()
 	{
@@ -90,18 +91,15 @@ public class FetchListings {
 	}
 	public static boolean save_listing(Listing new_listing)
 	{
-//		Iterator<Listing> iter = listings.iterator();
-//		while(iter.hasNext())
-//		{
-//			Listing listing = iter.next();
-//			int temp_ld = lev_dist.apply(new_listing.content, listing.content);
-//			if(temp_ld < SIM_THRESH && temp_ld != -1)
-//			{
-//				return false;
-//			}
-//		}
-		db.save_listing(new_listing);
-		listings.add(new_listing);
+		if(new_listing.determine_value() >= 0)
+		{
+			if(db.save_listing(new_listing))
+			{
+				listings.add(new_listing);
+			}
+			
+		}
+		
 		return true;
 	}
 	public void print_listings(int max)
@@ -168,14 +166,13 @@ public class FetchListings {
 				}
 			}
 			// run at most four threads at a time (not including main thread)
-			while(active_threads.size() < 4 && threads.size() > 0)
+			while(active_threads.size() < MAX_THREADS && threads.size() > 0)
 			{
 				Thread temp_thread = threads.remove(0);
 				active_threads.add(temp_thread);
 				temp_thread.start();
 			}
 		}
-		//f.send_best();
 		//f.print_listings(100);	
 	}
 	public static void parse_listings()
@@ -217,7 +214,7 @@ public class FetchListings {
 				}
 			}
 			// run at most four threads at a time (not including main thread)
-			while(active_threads.size() < 4 && threads.size() > 0)
+			while(active_threads.size() < MAX_THREADS && threads.size() > 0)
 			{
 				Thread temp_thread = threads.remove(0);
 				active_threads.add(temp_thread);
@@ -225,17 +222,27 @@ public class FetchListings {
 			}
 		}
 	}
+	public static void send_new_listings()
+	{
+		if(listings.size() > 0)
+		{
+			String body = "New Posts:";
+			for(Listing listing : listings)
+			{
+				body += "\n" + listing.title + ": " + listing.url;
+			}
+			gmail.send_notification("New 540i posts on CraigsList", body);
+		}
+	}
 	public static void main(String[] args) {
+		long start = System.nanoTime();
 		String[] regions = {"monterey", "losangeles", "sfbay", "santabarbara", "orangecounty", "sacramento"};
 		String[] queries = {"540i"};
 		init();
-		get_all_listings(regions, queries, 1);
-		System.out.println("Size: " + listing_urls.size());
-//		for (int i = 0; i < 20; i++) {
-//			System.out.println(listing_urls.get(i));
-//		}
+		get_all_listings(regions, queries, 3);
 		parse_listings();
-
-		System.out.println("Size: " + listing_urls.size());
+		send_new_listings();
+		long end = System.nanoTime();
+		System.out.println((end-start)/1000000000f + " sec");
     }
 }
