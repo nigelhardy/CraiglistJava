@@ -1,8 +1,10 @@
 package craigslist;
 
 import java.sql.*;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Iterator;
 import java.util.Vector;
 
 import org.apache.commons.text.similarity.*;
@@ -11,7 +13,9 @@ public class ListingDB {
 	private Connection c = null;
 	LevenshteinDistance lev_dist = null;
 	public static int LEV_DIST_THRESH_PER = 8;
+	public static DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 	Vector<Listing> db_listings = new Vector<Listing>();
+	Vector<String> all_urls = new Vector<String>();
 	public ListingDB()
 	{	      
 		lev_dist = new LevenshteinDistance(100);
@@ -46,6 +50,21 @@ public class ListingDB {
 						"'value'				NUMERIC" + 
 						");";
 		stmt.executeUpdate(sql);
+		stmt = c.createStatement();
+		sql = "CREATE TABLE IF NOT EXISTS 'Requests' (" +
+						"'id'					INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT," +
+						"'date'					TEXT," +
+						"'requests'				INTEGER" +
+						");";
+		stmt.executeUpdate(sql);
+		stmt = c.createStatement();
+		sql = "CREATE TABLE IF NOT EXISTS 'ListingUrls' (" +
+						"'id'					INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT," +
+						"'url'					TEXT," +
+						"'date'					TEXT" +
+						
+						");";
+		stmt.executeUpdate(sql);
 		stmt.close();
 	}
 	public void load_existing() throws SQLException
@@ -57,7 +76,6 @@ public class ListingDB {
 			Listing listing = new Listing();
 			listing.title = rs.getString("title");
 			listing.content = rs.getString("content");
-			DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 			listing.date = LocalDateTime.parse(rs.getString("date"), formatter);
 			listing.attr_make_model = rs.getString("attr_make_model");
 			listing.attr_odometer = rs.getInt("attr_odometer");
@@ -69,7 +87,48 @@ public class ListingDB {
 			listing.value = rs.getFloat("value");
 			db_listings.add(listing);
 		}
+		sql = "SELECT * FROM ListingUrls";
+		stmt = c.prepareStatement(sql);
+		rs = stmt.executeQuery();
+		while(rs.next()){
+			String d = rs.getString("date");
+			LocalDateTime url_date = LocalDateTime.parse(rs.getString("date"), formatter);
+			LocalDateTime month_ago = LocalDateTime.now().minusMonths(1);
+			
+			if(month_ago.isBefore(url_date))
+			{
+				String url = rs.getString("url");
+				all_urls.add(url);
+			}
+			
+
+			
+		}
 		return;
+	}
+	public int load_requests()
+	{
+		int total_requests = 0;
+		try {
+			LocalDateTime hr_ago = LocalDateTime.now().minusHours(1);
+			String sql = "SELECT * FROM Requests";
+			PreparedStatement stmt = c.prepareStatement(sql);
+			ResultSet rs = stmt.executeQuery();
+			
+			while(rs.next()){
+				LocalDateTime ldt = LocalDateTime.parse(rs.getString("date"), formatter);
+				int requests = rs.getInt("requests");
+				if(hr_ago.isBefore(ldt))
+				{
+					total_requests += requests;
+				}
+			}
+		} catch (Exception e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+		
+		return total_requests;
 		
 	}
 	public synchronized boolean save_listing(Listing listing)
@@ -86,7 +145,7 @@ public class ListingDB {
 					"VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);";
 			
 			PreparedStatement stmt = c.prepareStatement(sql);
-			stmt.setString(1, listing.date.toString());
+			stmt.setString(1, listing.date.format(formatter));
 			stmt.setString(2, listing.title);
 			stmt.setString(3, listing.content);
 			stmt.setString(4, listing.attr_make_model);
@@ -110,6 +169,57 @@ public class ListingDB {
 		}
 		
 		return false;
+	}
+	public void log_num_requests(int requests)
+	{
+		try {
+			String sql = "INSERT INTO 'Requests'('date','requests')" + 
+					"VALUES (?,?);";
+			
+			PreparedStatement stmt = c.prepareStatement(sql);
+			stmt.setString(1, LocalDateTime.now().withNano(0).format(formatter));
+			stmt.setInt(2, requests);
+
+			stmt.executeUpdate();
+			stmt.close();
+		} catch (Exception e) {
+			// TODO: handle exception
+			System.out.println("Couldn't record number of requests in db.");
+		}
+	}
+	public void save_listing_urls(Vector<String> urls)
+	{
+		try {
+			String sql = "INSERT INTO 'ListingUrls'('url','date')" + 
+					"VALUES (?,?);";
+			PreparedStatement stmt = c.prepareStatement(sql);
+			String now = LocalDateTime.now().withNano(0).format(formatter);
+			int max_per_batch = 100;
+			int counter = 0;
+			while(urls.size() > 0)
+			{
+				Iterator<String> iter = urls.iterator();
+				while(iter.hasNext() && counter < max_per_batch)
+				{
+					String url = iter.next();
+					
+					stmt.setString(1, url);
+					stmt.setString(2, now);
+					stmt.addBatch();
+					iter.remove();
+					counter++;
+				}
+				stmt.executeBatch();
+				counter = 0;
+			}
+			stmt.close();
+			
+		} catch (Exception e) {
+			// TODO: handle exception
+			System.out.println("Couldn't record number of requests in db.");
+		}
+		
+		
 	}
 	public synchronized boolean is_unique(Listing listing) throws SQLException
 	{

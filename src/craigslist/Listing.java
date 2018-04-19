@@ -25,10 +25,12 @@ public class Listing {
 	{
 		
 	}
-	public Listing(Document listing_doc, String listing_url, String region)
+	public Listing(Document listing_doc)
 	{
 		Elements title = listing_doc.select("#titletextonly");
 		Elements content = listing_doc.select("#postingbody");
+		String listing_url = listing_doc.baseUri();
+		String region = listing_url.split("//")[1].split("\\.")[0];
 		this.region = region;
 		if(listing_url.contains("/cto/"))
 		{

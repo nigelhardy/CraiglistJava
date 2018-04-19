@@ -17,20 +17,21 @@ import org.apache.commons.text.similarity.*;
 
 public class FetchListings {
 	static int MAX_THREADS = 8;
+	static int MAX_REQUESTS_PER_HOUR = 250;
 	static ListingDB db;
 	static Vector<Listing> listings = new Vector<Listing>();
 	static Vector<SearchPage> search_pages = new Vector<SearchPage>();
 	static Vector<String> listing_urls = new Vector<String>();
 	static SendMail gmail = null;
 	static LevenshteinDistance lev_dist = null;
+	static int num_requests = 0;
+	static int existing_requests = 0;
+	static boolean OLD_REQ = false;
 	
-	static void build_urls()
-	{
-		
-	}
 	public static void init()
 	{
 		db = new ListingDB();
+		existing_requests = db.load_requests();
 		lev_dist = new LevenshteinDistance(100);
 		gmail = new SendMail();
 	}
@@ -38,23 +39,76 @@ public class FetchListings {
 	{
 		
 	}
-	
+	public static synchronized void inc_requests()
+	{
+		num_requests++;
+	}
+	public static synchronized int get_requests()
+	{
+		return num_requests;
+	}
+	public static Document get_doc(String url)
+	{
+// Get Results page
+//		File search_page = new File("test_pages/" + region + page.toString());
+//		Document doc = null;
+//		if(search_page.exists() && OLD_REQ)
+//		{
+//			doc = Jsoup.parse(search_page, "UTF-8");
+//		}
+//		else
+//		{
+//			doc = Jsoup.connect(url).get();
+//			inc_requests();
+//			downloadPageSearch(doc, url, region, page);
+//		}
+// GET INDIV Listing
+//		File listing_page = new File("test_pages/" + url_parts[url_parts.length-1]);
+//		if(listing_page.exists() && OLD_REQ)
+//		{
+//			listing_doc = Jsoup.parse(listing_page, "UTF-8");
+//		}
+//		else
+//		{
+//			listing_doc = Jsoup.connect(listing_url).get();
+//			inc_requests();
+//			downloadPage(listing_doc, listing_url);
+//		}
+		if(get_requests() + existing_requests < MAX_REQUESTS_PER_HOUR)
+		{
+			try {
+				inc_requests();
+				return Jsoup.connect(url).get();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				return null;
+			}
+		}
+		else
+		{
+			return null;
+		}
+	}
+	public static synchronized void add_listing(String listing_url)
+	{
+		if(!db.all_urls.contains(listing_url) && !listing_urls.contains(listing_url) && listing_urls.size() + get_requests() + existing_requests < MAX_REQUESTS_PER_HOUR)
+		{
+			listing_urls.add(listing_url);
+		}
+	}
 	public static void get_listings(String region, String query, Integer page)
 	{
 		String url = "https://" + region + ".craigslist.org/search/cta?s=" + page.toString() + "&sort=date&query=" + query;
 		System.out.println("Getting " + url);
 		try {
-			File search_page = new File("test_pages/" + region + page.toString());
-			Document doc = null;
-			if(search_page.exists())
+			Document doc = get_doc(url);
+			if(doc == null)
 			{
-				doc = Jsoup.parse(search_page, "UTF-8");
+				System.out.println("Too many recent requests.");
+				return;
 			}
-			else
-			{
-				doc = Jsoup.connect(url).get();
-				downloadPageSearch(doc, url, region, page);
-			}
+			
 			Elements results = doc.select("p.result-info");
 			for (Element p_elem : results) 
 	        {
@@ -63,7 +117,7 @@ public class FetchListings {
 				for(Element a_elem : res_links) 
 				{
 					String listing_url = a_elem.attr("href");
-					listing_urls.add(listing_url);
+					add_listing(listing_url);
 				}				
 	        }
 		} catch (Exception e) {
@@ -73,20 +127,16 @@ public class FetchListings {
 	}
 	public static void parse_listing(String listing_url) throws Exception
 	{
-		Document listing_doc = null;
 		String[] url_parts = listing_url.split("/");
-		File listing_page = new File("test_pages/" + url_parts[url_parts.length-1]);
-		if(listing_page.exists())
+
+		Document listing_doc = get_doc(listing_url);
+		if(listing_doc == null)
 		{
-			listing_doc = Jsoup.parse(listing_page, "UTF-8");
+			System.out.println("Too many recent requests.");
+			return;
 		}
-		else
-		{
-			listing_doc = Jsoup.connect(listing_url).get();
-			downloadPage(listing_doc, listing_url);
-		}
-		String region = listing_url.split("//")[1].split("\\.")[0];
-		Listing listing = new Listing(listing_doc, listing_url, region);
+		
+		Listing listing = new Listing(listing_doc);
 		save_listing(listing);
 	}
 	public static boolean save_listing(Listing new_listing)
@@ -173,13 +223,12 @@ public class FetchListings {
 				temp_thread.start();
 			}
 		}
-		//f.print_listings(100);	
 	}
 	public static void parse_listings()
 	{
 //		// create vector of threads to parse each search page
 		Vector<Thread> threads = new Vector<Thread>();
-		for(String _listing_url : listing_urls)
+		for(int i = 0; i < listing_urls.size(); i++)
 		{
 			Runnable obj = new Runnable()
 			{
@@ -239,10 +288,16 @@ public class FetchListings {
 		String[] regions = {"monterey", "losangeles", "sfbay", "santabarbara", "orangecounty", "sacramento"};
 		String[] queries = {"540i"};
 		init();
-		get_all_listings(regions, queries, 3);
+		get_all_listings(regions, queries, 1);
+		db.save_listing_urls(new Vector<String>(listing_urls));
+		System.out.println("done");
 		parse_listings();
-		send_new_listings();
+		db.log_num_requests(num_requests);
 		long end = System.nanoTime();
-		System.out.println((end-start)/1000000000f + " sec");
+		System.out.println("Took " + (end-start)/1000000000f + " sec to get and parse listings.");
+		start = System.nanoTime();
+		send_new_listings();
+		end = System.nanoTime();
+		System.out.println("Took " + (end-start)/1000000000f + " sec to send email.");
     }
 }
