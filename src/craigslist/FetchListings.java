@@ -49,31 +49,6 @@ public class FetchListings {
 	}
 	public static Document get_doc(String url)
 	{
-// Get Results page
-//		File search_page = new File("test_pages/" + region + page.toString());
-//		Document doc = null;
-//		if(search_page.exists() && OLD_REQ)
-//		{
-//			doc = Jsoup.parse(search_page, "UTF-8");
-//		}
-//		else
-//		{
-//			doc = Jsoup.connect(url).get();
-//			inc_requests();
-//			downloadPageSearch(doc, url, region, page);
-//		}
-// GET INDIV Listing
-//		File listing_page = new File("test_pages/" + url_parts[url_parts.length-1]);
-//		if(listing_page.exists() && OLD_REQ)
-//		{
-//			listing_doc = Jsoup.parse(listing_page, "UTF-8");
-//		}
-//		else
-//		{
-//			listing_doc = Jsoup.connect(listing_url).get();
-//			inc_requests();
-//			downloadPage(listing_doc, listing_url);
-//		}
 		if(get_requests() + existing_requests < MAX_REQUESTS_PER_HOUR)
 		{
 			try {
@@ -285,6 +260,7 @@ public class FetchListings {
 	}
 	public static void main(String[] args) {
 		long start = System.nanoTime();
+		// Regions to search
 		String[] regions = {"monterey", "losangeles", "sfbay", "santabarbara", "orangecounty", "sacramento"};
 		String[] queries = {"540i"};
 		init();

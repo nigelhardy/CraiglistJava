@@ -98,14 +98,19 @@ public class Listing {
 	{
 		String model = "540";
 		
+		// disqualified if string found in the title
 		String [] title_dq = {"540ia", "automatic", "auto", "mechanic special", "parts", "part out", "part-out"};
+		// also disqualified if found in the title
 		String [] unwanted_models = {"325i", "328i", "330i", "525i", "530i", "535i", "550i", "740i", "X3", "X5", "X7",
 				"mercedes", "acura", "nissan", "volkswagen", "honda", "toyota", "lexus", "audi", "scion", "porsche"};
+		// disqualified if found in the body/content
 		String [] content_dq = {"540ia", "auto transmission", "automatic transmission", "auto trans", "parting out", "not running"};
 		
+		// select range of desired model years
 		int min_year_desired = 2000;
 		int max_year_desired = 2003;
 		
+		// avoid these model years (except for desired)
 		int min_year_avoid = 1990;
 		int max_year_avoid = 2018;
 				
@@ -113,6 +118,7 @@ public class Listing {
 		String [] man_trans_keys = {"manual transmission", "manual", "6 speed", "6-speed", "6 speed transmission", "six speed"};
 		String [] msport_keys = {"m sport", "m-sport", "msport", "sport"};
 		
+		// minus points
 		String [] bad = {"salvage title", "salvage", "oil leak", "leaking", "needs smog", "rebuild", 
 				"cracked windshield", "as is", "needs work", "needs tlc", "non op"};
 		
@@ -133,7 +139,7 @@ public class Listing {
 		
 		if(!title.contains(model) && !attr_make_model.contains(model))
 		{
-			// doesn't have 540, so lets get rid of it
+			// doesn't have model, so lets get rid of it
 			value = -1f;
 			return value;
 		}
@@ -196,9 +202,11 @@ public class Listing {
 		{
 			if(title.contains(i.toString()) || attr_make_model.contains(i.toString()))
 			{
+				// contains a desired year
 				value += 2;
 				break;
 			}
+			// weird hacky way to check for '03 or 99 (short version of year)
 			Integer short_year = i;
 			if(i >= 2000)
 			{
