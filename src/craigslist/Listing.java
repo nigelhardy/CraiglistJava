@@ -1,14 +1,26 @@
 package craigslist;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-
-public class Listing {
+public class Listing implements Serializable {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
 	LocalDateTime date;
+	@Override
+	public String toString() {
+		return "Listing [date=" + date + ", title=" + title + ", content=" + content + ", attr_make_model="
+				+ attr_make_model + ", attr_transmission=" + attr_transmission + ", attr_odometer=" + attr_odometer
+				+ ", attr_title_status=" + attr_title_status + ", price=" + price + ", num_images=" + num_images
+				+ ", by_owner=" + by_owner + ", url=" + url + ", region=" + region + ", value=" + value + "]";
+	}
 	String title = "";
 	String content = "";
 	String attr_make_model = "";
@@ -20,6 +32,10 @@ public class Listing {
 	boolean by_owner = false;
 	String url = "";
 	String region = "";
+	public Float getValue() {
+		return value;
+	}
+	static int count = 0;
 	Float value = 0.0f;
 	public Listing()
 	{
@@ -94,6 +110,62 @@ public class Listing {
 			
 		}
 	}
+	public float fake_value(int i)
+	{
+		value = (float) i;
+		return value;
+	}
+	public float set_wagon_value()
+	{
+		String[] models = {"wagon", "325i", "325it", "328i", "328it", "325xi", "328xi"};
+		String [] unwanted_models = {"kia", "scion", "lincoln"};
+		String [] man_trans_keys = {"manual transmission", "manual",  "5 speed", "6 speed", "5-speed", "6-speed",
+				"5 speed transmission", "6 speed transmission", "five speed", "six speed", "5mt", "6mt", "5sp", "6sp", "5-sp", "6-sp"};
+
+//		if(attr_odometer > 150000)
+//		{
+//			value -= 1.f;
+//		}
+//		else if(attr_odometer > 100000)
+//		{
+//			value -= .5f;
+//		}
+		for(String key : unwanted_models) 
+		{
+			if(title.contains(key) || attr_make_model.contains(key))
+			{
+				value = -1f;
+				return value;
+			}
+		}
+		for(String key : models) 
+		{
+			if(title.contains(key) || attr_make_model.contains(key))
+			{
+				value += 1f;
+			}
+		}
+		for(String key : man_trans_keys) 
+		{
+			if(title.contains(key) || attr_make_model.contains(key))
+			{
+				value += 1f;
+			}
+		}
+		for(String key : man_trans_keys) 
+		{
+			if(content.contains(key))
+			{
+				value += .5f;
+			}
+		}
+		if(price < 3500)
+		{
+			value += 1.f;
+		}
+		return value;
+	}
+	// Nigel's legacy function for 540i
 	public float determine_value()
 	{
 		String model = "540";

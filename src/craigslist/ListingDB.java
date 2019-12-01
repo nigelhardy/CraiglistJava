@@ -1,5 +1,11 @@
 package craigslist;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutput;
 import java.sql.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -7,6 +13,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Iterator;
 import java.util.Vector;
 
+import org.apache.commons.lang3.SerializationUtils;
 import org.apache.commons.text.similarity.*;
 
 public class ListingDB {
@@ -17,7 +24,7 @@ public class ListingDB {
 	Vector<Listing> db_listings = new Vector<Listing>();
 	Vector<String> all_urls = new Vector<String>();
 	public ListingDB()
-	{	      
+	{
 		lev_dist = new LevenshteinDistance(100);
 		try {
 			Class.forName("org.sqlite.JDBC");
@@ -29,6 +36,79 @@ public class ListingDB {
 			System.exit(0);
 	  	}
 		System.out.println("Opened database successfully");
+	}
+	public void createSerialListingTable()
+	{
+		
+		Statement stmt;
+		try {
+			stmt = c.createStatement();
+			String sql = "CREATE TABLE IF NOT EXISTS 'SerialListings' (" +
+					"'id'					INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT," +
+					"'title'				TEXT," +
+					"'url'					TEXT," +
+					"'serialized_object'	BLOB" +
+					");";
+			stmt.executeUpdate(sql);
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+	}
+	public synchronized boolean saveSerialListing(Listing listing)
+	{
+		try
+		{
+			String sql = "INSERT INTO 'SerialListings'('title','url','serialized_object'" + 
+					")" + 
+					"VALUES (?,?,?);";
+			
+			PreparedStatement stmt = c.prepareStatement(sql);
+			stmt.setString(1, listing.title);
+			stmt.setString(2, listing.url);
+			byte[] listingBytes = SerializationUtils.serialize(listing);
+			stmt.setBytes(3, listingBytes);
+			stmt.executeUpdate();
+			stmt.close();
+			return true;
+		}
+		catch (SQLException e) {
+			e.printStackTrace();
+			System.out.println("Error adding listing to db");
+		}
+		return false;
+	}
+	public Vector<Listing> loadSerialListings()
+	{
+		Vector<Listing> listings = new Vector<Listing>();
+		String sql = "SELECT * FROM SerialListings";
+		PreparedStatement stmt;
+		try {
+			stmt = c.prepareStatement(sql);
+			ResultSet rs = stmt.executeQuery();
+			while(rs.next()){
+				byte[] buf = rs.getBytes("serialized_object");
+				Listing listing = SerializationUtils.deserialize(buf);
+				listings.add(listing);
+			}
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace(); }
+
+		return listings;
+	}
+	public void deleteOldListings()
+	{
+		try {
+			Statement stmt = c.createStatement();
+			String sql = "DELETE FROM SerialListings;";
+			stmt.executeUpdate(sql);
+			stmt.close();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 	public void create_listing_table() throws SQLException
 	{
@@ -100,9 +180,6 @@ public class ListingDB {
 				String url = rs.getString("url");
 				all_urls.add(url);
 			}
-			
-
-			
 		}
 		return;
 	}
@@ -167,7 +244,6 @@ public class ListingDB {
 			e.printStackTrace();
 			System.out.println("Error adding listing to db");
 		}
-		
 		return false;
 	}
 	public void log_num_requests(int requests)
@@ -179,7 +255,6 @@ public class ListingDB {
 			PreparedStatement stmt = c.prepareStatement(sql);
 			stmt.setString(1, LocalDateTime.now().withNano(0).format(formatter));
 			stmt.setInt(2, requests);
-
 			stmt.executeUpdate();
 			stmt.close();
 		} catch (Exception e) {

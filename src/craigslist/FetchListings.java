@@ -1,6 +1,8 @@
 package craigslist;
 
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Vector;
 
@@ -33,7 +35,7 @@ public class FetchListings {
 		db = new ListingDB();
 		existing_requests = db.load_requests();
 		lev_dist = new LevenshteinDistance(100);
-		gmail = new SendMail();
+		//gmail = new SendMail();
 	}
 	public FetchListings()
 	{
@@ -65,24 +67,30 @@ public class FetchListings {
 			return null;
 		}
 	}
-	public static synchronized void add_listing(String listing_url)
+	public static Document getDocument(String url)
 	{
-		if(!db.all_urls.contains(listing_url) && !listing_urls.contains(listing_url) && listing_urls.size() + get_requests() + existing_requests < MAX_REQUESTS_PER_HOUR)
-		{
-			listing_urls.add(listing_url);
+		try {
+			return Jsoup.connect(url).get();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			return null;
 		}
 	}
-	public static void get_listings(String region, String query, Integer page)
+	public static synchronized void add_listing(String listing_url)
 	{
-		String url = "https://" + region + ".craigslist.org/search/cta?s=" + page.toString() + "&sort=date&query=" + query;
-		System.out.println("Getting " + url);
+//		if(!db.all_urls.contains(listing_url) && !listing_urls.contains(listing_url) && listing_urls.size() + get_requests() + existing_requests < MAX_REQUESTS_PER_HOUR)
+//		{
+//			listing_urls.add(listing_url);
+//		}
+		listing_urls.add(listing_url);
+
+	}
+	public static void getListings(SearchPage searchPage, Vector<String> listingUrls)
+	{
+		System.out.println("Getting " + searchPage.get_url());
 		try {
-			Document doc = get_doc(url);
-			if(doc == null)
-			{
-				System.out.println("Too many recent requests.");
-				return;
-			}
+			Document doc = getDocument(searchPage.get_url());
 			
 			Elements results = doc.select("p.result-info");
 			for (Element p_elem : results) 
@@ -92,27 +100,26 @@ public class FetchListings {
 				for(Element a_elem : res_links) 
 				{
 					String listing_url = a_elem.attr("href");
-					add_listing(listing_url);
-				}				
+					listingUrls.add(listing_url);
+				}		
 	        }
 		} catch (Exception e) {
 			e.printStackTrace();
-			System.out.println("Exception when traversing url: " + url);
+			System.out.println("Exception when traversing url: " + searchPage.get_url());
 		}
 	}
-	public static void parse_listing(String listing_url) throws Exception
+	public static Listing parseListing(String listingUrl) throws Exception
 	{
-		String[] url_parts = listing_url.split("/");
-
-		Document listing_doc = get_doc(listing_url);
-		if(listing_doc == null)
+		Document listingDoc = getDocument(listingUrl);
+		try
 		{
-			System.out.println("Too many recent requests.");
-			return;
+		    Thread.sleep(100);
 		}
-		
-		Listing listing = new Listing(listing_doc);
-		save_listing(listing);
+		catch(InterruptedException ex)
+		{
+		    Thread.currentThread().interrupt();
+		}
+		return new Listing(listingDoc);
 	}
 	public static boolean save_listing(Listing new_listing)
 	{
@@ -150,8 +157,9 @@ public class FetchListings {
         final File f = new File("test_pages/" + region + page.toString());
         FileUtils.writeStringToFile(f, doc.outerHtml(), "UTF-8");
     }
-	public static void get_all_listings(String[] regions, String[] queries, int pages)
-	{		
+	public static Vector<SearchPage> generateSearchPages(String[] regions, String[] queries, int pages)
+	{
+		Vector<SearchPage> searchPages = new Vector<SearchPage>();
 		// create vector of urls to search
 		for(String region : regions)
 		{
@@ -159,92 +167,33 @@ public class FetchListings {
 			{
 				for(int i = 0; i < pages; i++)
 				{
-					search_pages.add(new SearchPage(region, query, i));
+					searchPages.add(new SearchPage(region, query, i));
 				}
 			}
 		}
-		// create vector of threads to parse each search page
-		Vector<Thread> threads = new Vector<Thread>();
-		for(SearchPage sp : search_pages)
-		{
-			Runnable obj = new Runnable()
-			{
-				public void run()
-				{
-					SearchPage sp = search_pages.remove(0);
-					get_listings(sp.region, sp.query, sp.page);
-				}
-			};
-			threads.addElement(new Thread(obj));
-		}
-		Vector<Thread> active_threads = new Vector<Thread>();
-		while(threads.size() > 0 || active_threads.size() > 0)
-		{
-			// remove dead threads
-			Iterator<Thread> thread_iter = active_threads.iterator();
-			while(thread_iter.hasNext())
-			{
-				Thread temp_thread = thread_iter.next();
-				if(!temp_thread.isAlive())
-				{
-					thread_iter.remove();
-				}
-			}
-			// run at most four threads at a time (not including main thread)
-			while(active_threads.size() < MAX_THREADS && threads.size() > 0)
-			{
-				Thread temp_thread = threads.remove(0);
-				active_threads.add(temp_thread);
-				temp_thread.start();
-			}
-		}
+		return searchPages;
 	}
-	public static void parse_listings()
+	public static Vector<String> searchPageToListingUrl(Vector<SearchPage> searchPages)
 	{
-//		// create vector of threads to parse each search page
-		Vector<Thread> threads = new Vector<Thread>();
-		for(int i = 0; i < listing_urls.size(); i++)
+		Vector<String> allListingUrls = new Vector<String>();
+		for(SearchPage sp : searchPages)
 		{
-			Runnable obj = new Runnable()
-			{
-				public void run()
-				{
-					if(listing_urls.size() > 0)
-					{
-						String listing_url = listing_urls.remove(0);
-						try {
-							parse_listing(listing_url);
-						} catch (Exception e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						}
-					}
-					
-				}
-			};
-			threads.addElement(new Thread(obj));
+			getListings(sp, allListingUrls);
 		}
-		Vector<Thread> active_threads = new Vector<Thread>();
-		while(threads.size() > 0 || active_threads.size() > 0)
+		return allListingUrls;
+	}
+	public static Vector<Listing> urlsToListings(Vector<String> listingUrls)
+	{
+		Vector<Listing> listings = new Vector<Listing>();
+		for(int i = 0; i < listingUrls.size(); i++)
 		{
-			// remove dead threads
-			Iterator<Thread> thread_iter = active_threads.iterator();
-			while(thread_iter.hasNext())
-			{
-				Thread temp_thread = thread_iter.next();
-				if(!temp_thread.isAlive())
-				{
-					thread_iter.remove();
-				}
-			}
-			// run at most four threads at a time (not including main thread)
-			while(active_threads.size() < MAX_THREADS && threads.size() > 0)
-			{
-				Thread temp_thread = threads.remove(0);
-				active_threads.add(temp_thread);
-				temp_thread.start();
+			try {
+				listings.add(parseListing(listingUrls.get(i)));
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
 		}
+		return listings;
 	}
 	public static void send_new_listings()
 	{
@@ -259,21 +208,68 @@ public class FetchListings {
 		}
 	}
 	public static void main(String[] args) {
-		long start = System.nanoTime();
 		// Regions to search
-		String[] regions = {"monterey", "losangeles", "sfbay", "santabarbara", "orangecounty", "sacramento"};
-		String[] queries = {"540i"};
+		// ex: monterey, sfbay, losangeles, orangecounty
+		// bakersfield, sacramento, slo, sandiego
+		String[] regions = {"monterey", "sfbay", "losangeles"};
+		// search query (words you type into the search bar)
+		String[] queries = {"wagon"};
+		// pages to get per query
+		int pages = 3;
+		int max_results = 50000;
+		// initialize the database
 		init();
-		get_all_listings(regions, queries, 1);
-		db.save_listing_urls(new Vector<String>(listing_urls));
-		System.out.println("done");
-		parse_listings();
-		db.log_num_requests(num_requests);
-		long end = System.nanoTime();
-		System.out.println("Took " + (end-start)/1000000000f + " sec to get and parse listings.");
-		start = System.nanoTime();
-		send_new_listings();
-		end = System.nanoTime();
-		System.out.println("Took " + (end-start)/1000000000f + " sec to send email.");
+		// pull new listings from craigslist? (false to use ones from DB)
+		boolean getNewListings = false;
+		if(getNewListings)
+		{
+			db.deleteOldListings();
+			Vector<SearchPage> searchPages = generateSearchPages(regions, queries, pages);
+			System.out.println(searchPages.size());
+			Vector<String> listingUrls = searchPageToListingUrl(searchPages);
+			System.out.println(listingUrls.size());
+			Vector<Listing> listings = urlsToListings(listingUrls);
+			System.out.println(listings.size());
+			db.createSerialListingTable();
+			for(int i = 0; i < listings.size(); i++)
+			{
+				db.saveSerialListing(listings.get(i));
+			}
+		}
+
+		Vector<Listing> listings = db.loadSerialListings();
+		System.out.println(listings.size());
+		for(int i = 0; i < listings.size(); i++)
+		{
+			listings.get(i).set_wagon_value();
+		}
+		// sort by value (highest first)
+		listings.sort(new ValueSorter());
+		Collections.reverse(listings);
+		String fileName = "craigslist-result.html";
+	    String str = "World";
+	    String header = "<html><body><h1>Emmo Tries Computers</h1>";
+	    String footer = "</body></html>";
+	    BufferedWriter writer;
+		try {
+			writer = new BufferedWriter(new FileWriter(fileName));
+			writer.append(header);
+			for(int i = 0; i < Math.min(listings.size(), max_results); i++)
+			{
+				Listing listing = listings.get(i);
+				writer.append("<br><a target=\"_blank\" href=\"");
+				writer.append(listing.url);
+				writer.append("\">" + listing.getValue() + " - " + listing.title + "</a>");
+			}
+		    writer.append(footer);
+		     
+		    writer.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+
+		System.out.println("Done");
     }
 }

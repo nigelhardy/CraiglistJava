@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Scanner;
+import java.util.Vector;
 
 import javax.mail.*;
 import javax.mail.internet.*;
@@ -47,7 +48,8 @@ public class SendMail {
 		String USER_NAME = config.get("username");  // GMail user name
 	    String PASSWORD = config.get("password"); // GMail password
 	    String[] RECIPIENT = {config.get("recipient")};
-		
+
+
 	    if(USER_NAME != null && PASSWORD != null && RECIPIENT != null)
 	    {
 	        sendFromGMail(USER_NAME, PASSWORD, RECIPIENT, subject, body);
@@ -97,5 +99,11 @@ public class SendMail {
         catch (MessagingException me) {
             me.printStackTrace();
         }
+    }
+	public static void main(String[] args) {
+		long start = System.nanoTime();
+		// Regions to search
+		SendMail sm = new SendMail();
+		sm.send_notification("Hi", "SUCK IT");
     }
 }
