@@ -79,7 +79,34 @@ public class ListingDB {
 		}
 		return false;
 	}
-	public Vector<Listing> loadSerialListings()
+	public synchronized boolean saveSerialListings(Vector<Listing> listings)
+	{
+		try
+		{
+			String sql = "INSERT INTO 'SerialListings'('title','url','serialized_object'" + 
+					")" + 
+					"VALUES (?,?,?);";
+			
+			PreparedStatement stmt = c.prepareStatement(sql);
+			for(Listing listing : listings)
+			{
+				stmt.setString(1, listing.title);
+				stmt.setString(2, listing.url);
+				byte[] listingBytes = SerializationUtils.serialize(listing);
+				stmt.setBytes(3, listingBytes);
+				stmt.addBatch();
+			}
+			stmt.executeBatch();
+			stmt.close();
+			return true;
+		}
+		catch (SQLException e) {
+			e.printStackTrace();
+			System.out.println("Error adding listing to db");
+		}
+		return false;
+	}
+	public Vector<Listing> loadSerialListings(int max)
 	{
 		Vector<Listing> listings = new Vector<Listing>();
 		String sql = "SELECT * FROM SerialListings";
@@ -91,12 +118,18 @@ public class ListingDB {
 				byte[] buf = rs.getBytes("serialized_object");
 				Listing listing = SerializationUtils.deserialize(buf);
 				listings.add(listing);
+				if(listings.size() >= max && max != -1)
+					return listings;
 			}
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace(); }
 
 		return listings;
+	}
+	public Vector<Listing> loadSerialListings()
+	{
+		return loadSerialListings(-1);
 	}
 	public void deleteOldListings()
 	{
@@ -305,6 +338,21 @@ public class ListingDB {
 			Integer threshold =  (int) Math.max(LEV_DIST_THRESH_PER, LEV_DIST_THRESH_PER * Math.min(db_listing.content.length(), listing.content.length()) / 50f);
 			
 			if((ld < threshold && ld != -1) || (db_listing.title.equals(listing.title) && db_listing.title.length() > 30))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+	public synchronized boolean is_unique(Listing new_listing, Vector<Listing> listings) throws SQLException
+	{
+		// filters out listing that are slightly different reposts
+		for(Listing listing : listings)
+		{
+			Integer ld = lev_dist.apply(listing.content, new_listing.content);
+			Integer threshold =  (int) Math.max(LEV_DIST_THRESH_PER, LEV_DIST_THRESH_PER * Math.min(listing.content.length(), new_listing.content.length()) / 50f);
+			
+			if((ld < threshold && ld != -1) || (listing.title.equals(new_listing.title) && listing.title.length() > 30))
 			{
 				return false;
 			}

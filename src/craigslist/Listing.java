@@ -32,6 +32,7 @@ public class Listing implements Serializable {
 	boolean by_owner = false;
 	String url = "";
 	String region = "";
+	String frame_size = "";
 	public Float getValue() {
 		return value;
 	}
@@ -88,6 +89,11 @@ public class Listing implements Serializable {
 					{
 						this.attr_odometer = Integer.parseInt(attr[1].trim());
 					}
+					if(attr[0].toLowerCase().equals("frame size"))
+					{
+						this.frame_size = attr[1].trim();
+					}
+					
 				}
 				try
 				{
@@ -115,21 +121,89 @@ public class Listing implements Serializable {
 		value = (float) i;
 		return value;
 	}
-	public float set_wagon_value()
+	public float set_bicycle_value()
 	{
-		String[] models = {"wagon", "325i", "325it", "328i", "328it", "325xi", "328xi"};
-		String [] unwanted_models = {"kia", "scion", "lincoln"};
-		String [] man_trans_keys = {"manual transmission", "manual",  "5 speed", "6 speed", "5-speed", "6-speed",
-				"5 speed transmission", "6 speed transmission", "five speed", "six speed", "5mt", "6mt", "5sp", "6sp", "5-sp", "6-sp"};
+		String [] good_title= {"specialized", "gary fisher", "santa cruz", "trek", "xt", "lx", "shimano", "hardtail"};
+		String [] good_content= {"specialized", "gary fisher", "santa cruz", "trek", "xt", "lx", "shimano", "large"};
 
-//		if(attr_odometer > 150000)
-//		{
-//			value -= 1.f;
-//		}
-//		else if(attr_odometer > 100000)
-//		{
-//			value -= .5f;
-//		}
+		String[] bad_title = {"small", "medium", "kids", "women", "20 inch", "20 in", "20\"", "24 in", "24\""};
+		String[] bad_content = {"small", "medium", "women", "kids"};
+		
+		for(String key : good_title) 
+		{
+			if(title.contains(key))
+			{
+				value += 1f;
+			}
+		}
+		for(String key : good_content) 
+		{
+			if(content.contains(key))
+			{
+				value += 1f;
+			}
+		}
+		for(String key : bad_title) 
+		{
+			if(content.contains(key))
+			{
+				value -= 1f;
+			}
+		}
+		for(String key : bad_content) 
+		{
+			if(content.contains(key))
+			{
+				value -= 1f;
+			}
+		}
+
+		if(price < 200 && price > 2)
+		{
+			value += 1.f;
+		}
+		else if(price < 300 && price > 2)
+		{
+			value += .5f;
+		} 
+		else if(price > 600)
+		{
+			value = -1f;
+			return value;
+		}
+			
+		return value;
+	}
+	public float set_sportwagen_value()
+	{
+		String[] models = {"sportwagen", "jetta wagon", "wagon", "tdi",
+				"golf wagon", "diesel"};
+		String [] unwanted_models = {"toyota", "kia", "scion", "lincoln", "ford", "mini cooper",
+				"buick", "chrysler", "nissan", "r350", "dodge ram", "brz", "mazda", 
+				"challenger", "chevrolet", "x3", "porsche", "forester",
+				"fiat", "infiniti", "hyundai"};
+		String [] good_keywords = {"one owner", "one-owner", "1-owner", "1 owner",
+				"clean title", "low miles"};
+		String [] man_trans_keys = {"manual transmission", "manual", "6 speed", "6-speed",
+				"6 speed transmission", "six speed", "6mt", "6sp", "6-sp", "6 speed manual",
+				"stick shift", "manual trans"};
+		String [] bad_keywords = {"dsg", "sedan", "sdn", "convertible", "automatic",
+				"tiptronic", "automatic transmission", "salvage title", "6a",
+				"automatic 6-speed", "6 speed auto", "auto trans", "a/t", "6-speed a/t"};
+		content = content.split("keyword")[0];
+
+		if(attr_odometer > 150000)
+		{
+			value -= 1.5f;
+		}
+		else if(attr_odometer > 100000)
+		{
+			value -= 1.f;
+		}
+		else if(attr_odometer > 80000)
+		{
+			value -= .5f;
+		}
 		for(String key : unwanted_models) 
 		{
 			if(title.contains(key) || attr_make_model.contains(key))
@@ -141,27 +215,38 @@ public class Listing implements Serializable {
 		for(String key : models) 
 		{
 			if(title.contains(key) || attr_make_model.contains(key))
-			{
 				value += 1f;
-			}
 		}
 		for(String key : man_trans_keys) 
 		{
 			if(title.contains(key) || attr_make_model.contains(key))
-			{
 				value += 1f;
-			}
 		}
 		for(String key : man_trans_keys) 
 		{
 			if(content.contains(key))
-			{
 				value += .5f;
-			}
 		}
-		if(price < 3500)
+		for(String key : good_keywords) 
+		{
+			if(content.contains(key))
+				value += 1.f;
+		}
+		for(String key : bad_keywords) 
+		{
+			if(title.contains(key) || attr_make_model.contains(key))
+				value -= 1.f;
+		}
+		if(attr_transmission.contains("automatic"))
+			value -= 1.5f;
+		if(price < 10000 && price > 0)
 		{
 			value += 1.f;
+		}
+		if(price > 17000)
+		{
+			value = -1.f;
+			return value;
 		}
 		return value;
 	}
