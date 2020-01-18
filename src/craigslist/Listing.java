@@ -34,10 +34,12 @@ public class Listing implements Serializable {
 	String region = "";
 	String frame_size = "";
 	public Float getValue() {
+		if(value == Float.NEGATIVE_INFINITY)
+			set_sportwagen_value();
 		return value;
 	}
 	static int count = 0;
-	Float value = 0.0f;
+	Float value = Float.NEGATIVE_INFINITY;
 	public Listing()
 	{
 		
@@ -176,34 +178,62 @@ public class Listing implements Serializable {
 	}
 	public float set_sportwagen_value()
 	{
-		String[] models = {"sportwagen", "jetta wagon", "wagon", "tdi",
+		String[] models = {"sportwagen", "sportwagon", "jetta wagon", "wagon", "tdi",
 				"golf wagon", "diesel"};
+		
 		String [] unwanted_models = {"toyota", "kia", "scion", "lincoln", "ford", "mini cooper",
 				"buick", "chrysler", "nissan", "r350", "dodge ram", "brz", "mazda", 
-				"challenger", "chevrolet", "x3", "porsche", "forester",
-				"fiat", "infiniti", "hyundai"};
+				"challenger", "chevrolet", "x3", "porsche", "forester", "mini clubman",
+				"cooper", "lexus", "chevy", "chevrolet",
+				"fiat", "infiniti", "hyundai", "suzuki", "jeep", "dodge"};
+		
 		String [] good_keywords = {"one owner", "one-owner", "1-owner", "1 owner",
-				"clean title", "low miles"};
-		String [] man_trans_keys = {"manual transmission", "manual", "6 speed", "6-speed",
-				"6 speed transmission", "six speed", "6mt", "6sp", "6-sp", "6 speed manual",
-				"stick shift", "manual trans"};
-		String [] bad_keywords = {"dsg", "sedan", "sdn", "convertible", "automatic",
-				"tiptronic", "automatic transmission", "salvage title", "6a",
-				"automatic 6-speed", "6 speed auto", "auto trans", "a/t", "6-speed a/t"};
+				"clean title", "low miles", "clean", "service records", "service history"};
+		
+		String good_title[] = {"2010", "2011", "2012", "2013", "2014"};
+		
+		String [] man_trans_keys = {"manual transmission", "6 speed manual", "manual", "6 speed", "6-speed",
+				"6mt", "six speed", "stick shift", "manual trans", "transmission manual", "transmission: manual"};
+		
+		String [] man_trans_title = {"6sp", "6speed", "6 speed", "manual", "6 sp", "six speed", "6-sp",
+				"6-speed", "6mt", "6m"};
+		
+		String [] bad_keywords = {"dsg", "salvage", "rebuilt", "sedan", "sdn", "convertible", "automatic",
+				"tiptronic", "automatic transmission", "salvage title", "6a", "transmission: automatic",
+				"automatic 6-speed", "6 speed auto", "auto trans", "a/t", "6-speed a/t",
+				"auto 6-spd", "tptrnc", "suv", "coupe", "transmission : automatic"};
 		content = content.split("keyword")[0];
-
-		if(attr_odometer > 150000)
-		{
-			value -= 1.5f;
-		}
-		else if(attr_odometer > 100000)
+		if(attr_title_status == "salvage")
 		{
 			value -= 1.f;
 		}
+		if(attr_odometer > 150000)
+		{
+			value -= 3f;
+		}
+		else if(attr_odometer > 100000)
+		{
+			value -= 2.f;
+		}
 		else if(attr_odometer > 80000)
 		{
-			value -= .5f;
+			value -= 1f;
 		}
+		
+		if(title.contains("dsg"))
+		{
+			value -= 3.f;
+		}
+		// Remove new subarus
+		for(Integer i = 2008; i < 2020; i++)
+		{
+			if(title.contains(i.toString()) && title.contains("subaru"))
+			{
+				value = -1f;
+				return value;
+			}
+		}
+		
 		for(String key : unwanted_models) 
 		{
 			if(title.contains(key) || attr_make_model.contains(key))
@@ -215,35 +245,61 @@ public class Listing implements Serializable {
 		for(String key : models) 
 		{
 			if(title.contains(key) || attr_make_model.contains(key))
+				value += 2f;
+		}
+		for(String key : good_title) 
+		{
+			if(title.contains(key) || attr_make_model.contains(key))
+			{
 				value += 1f;
+				break;
+			}
 		}
 		for(String key : man_trans_keys) 
 		{
 			if(title.contains(key) || attr_make_model.contains(key))
+			{
 				value += 1f;
+				break;
+			}
 		}
 		for(String key : man_trans_keys) 
 		{
 			if(content.contains(key))
+			{
 				value += .5f;
+				break;
+			}
 		}
 		for(String key : good_keywords) 
 		{
 			if(content.contains(key))
 				value += 1.f;
 		}
+		float bad_key_val = 0f;
 		for(String key : bad_keywords) 
 		{
-			if(title.contains(key) || attr_make_model.contains(key))
+			if(content.contains(key))
+				bad_key_val -= 1.f;
+			if(bad_key_val < -2)
+			{
+				break;
+			}
+		}
+		value += bad_key_val;
+		for(String key : bad_keywords) 
+		{
+			if(title.contains(key) || attr_make_model.contains(key)
+					|| content.contains(key))
 				value -= 1.f;
 		}
 		if(attr_transmission.contains("automatic"))
-			value -= 1.5f;
+			value -= 2f;
 		if(price < 10000 && price > 0)
 		{
 			value += 1.f;
 		}
-		if(price > 17000)
+		if(price > 14000)
 		{
 			value = -1.f;
 			return value;

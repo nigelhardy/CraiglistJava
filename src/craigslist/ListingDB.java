@@ -119,7 +119,10 @@ public class ListingDB {
 				Listing listing = SerializationUtils.deserialize(buf);
 				listings.add(listing);
 				if(listings.size() >= max && max != -1)
+				{
+					db_listings = listings;
 					return listings;
+				}
 			}
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
@@ -344,16 +347,34 @@ public class ListingDB {
 		}
 		return true;
 	}
-	public synchronized boolean is_unique(Listing new_listing, Vector<Listing> listings) throws SQLException
+	public synchronized boolean is_unique(Listing new_listing, Vector<Listing> listings, boolean swap_better) throws SQLException
 	{
 		// filters out listing that are slightly different reposts
 		for(Listing listing : listings)
 		{
+
 			Integer ld = lev_dist.apply(listing.content, new_listing.content);
 			Integer threshold =  (int) Math.max(LEV_DIST_THRESH_PER, LEV_DIST_THRESH_PER * Math.min(listing.content.length(), new_listing.content.length()) / 50f);
-			
+			if(new_listing.getValue() > 1.f)
+			{
+				// if the listing has a high score, don't be as strict with duplicates
+				threshold = (int) ((float) threshold * 1f);
+			}
+			if(listing.url == new_listing.url)
+			{
+				if(new_listing.getValue() > listing.getValue())
+				{
+					listings.remove(listing);
+					listings.add(new_listing);
+				}
+			}
 			if((ld < threshold && ld != -1) || (listing.title.equals(new_listing.title) && listing.title.length() > 30))
 			{
+				if(new_listing.getValue() > listing.getValue())
+				{
+					listings.remove(listing);
+					listings.add(new_listing);
+				}
 				return false;
 			}
 		}

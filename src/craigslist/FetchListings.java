@@ -4,6 +4,7 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Vector;
 
 import org.jsoup.Jsoup;
@@ -19,8 +20,9 @@ import org.apache.commons.io.FileUtils;
 
 public class FetchListings {
 	static int MAX_THREADS = 8;
-	static int MAX_REQUESTS_PER_HOUR = 100;
+	static int MAX_REQUESTS_PER_RUN = 1000;
 	static boolean DEV_MODE = false;
+	static boolean GEN_HTML = false;
 	static ListingDB db;
 	static Vector<Listing> listings = new Vector<Listing>();
 	static Vector<SearchPage> search_pages = new Vector<SearchPage>();
@@ -33,7 +35,7 @@ public class FetchListings {
 	public static void init()
 	{
 		db = new ListingDB();
-		existing_requests = db.load_requests();
+		//existing_requests = db.load_requests();
 		System.out.println("Existing requests: " + Integer.toString(existing_requests));
 		db.createSerialListingTable();
 		gmail = new SendMail();
@@ -54,7 +56,7 @@ public class FetchListings {
 	}
 	public static void getListings(SearchPage searchPage, Vector<String> listingUrls)
 	{
-		System.out.println("Getting " + searchPage.get_url());
+//		System.out.println("Getting " + searchPage.get_url());
 		try {
 			Document doc = getDocument(searchPage.get_url());
 			
@@ -150,16 +152,10 @@ public class FetchListings {
 		{
 			for(String uniqueUrl : uniqueUrls)
 			{
-				System.out.print("URL = " + uniqueUrl);
 				if(db.all_urls.contains(uniqueUrl))
 				{
-					System.out.println(" DUPLICATE");
 					// already in DB, ignore
 					removeThese.add(uniqueUrl);
-				}
-				else
-				{
-					System.out.println();
 				}
 			}
 		}
@@ -179,33 +175,29 @@ public class FetchListings {
 		Vector<Listing> listings = new Vector<Listing>();
 		for(String listingUrl : listingUrls)
 		{
-			if(!DEV_MODE && existing_requests >= MAX_REQUESTS_PER_HOUR)
+			if(db.all_urls.contains(listingUrl))
 			{
-				break;
+				continue;
 			}
-			else if(!DEV_MODE)
+			if(!DEV_MODE && existing_requests >= MAX_REQUESTS_PER_RUN)
 			{
-				existing_requests++;
-				try {
-					listings.add(parseListing(listingUrl));
-				} catch (Exception e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
+				System.out.println("Hit max requests allowed per run");
+				break;
 			}
 			else
 			{
-				System.out.println(listingUrl);
 				if(currentListing / totalListings > currentPercent)
 				{
 					System.out.println("Parsing " + Math.round(currentPercent*100) + "% done.");
 					currentPercent += percentMessage;
 				}
 				try {
-					listings.add(parseListing(listingUrl));
+					Listing l = parseListing(listingUrl);
+					existing_requests++;
+					listings.add(l);		
 				} catch (Exception e) {
 					e.printStackTrace();
-				}		
+				}	
 			}
 			currentListing++;
 		}
@@ -216,38 +208,106 @@ public class FetchListings {
 	{
 		if(goodListings.size() > 0)
 		{
-			String body = "New Sportwagen Listings:";
+			String body = "New Sportwagen Listings: \n";
 			for(Listing goodListing : goodListings)
 			{
-				body += "\n" + goodListing.title + ": " + goodListing.url;
+				body += goodListing.region + "\n" + goodListing.title + ": " + goodListing.url + "\n";
 			}
 			System.out.println(body);
-			//gmail.send_notification("New posts on CraigsList", body);
+			gmail.send_notification("New posts on CraigsList", body);
+		}
+	}
+	public static Vector<Listing> makeUnique(Vector<Listing> listings)
+	{
+		float totalListings = (float)listings.size();
+		float currentPercent = 0f;
+		float percentMessage = .01f;
+		float currentListing = 0f;
+		Vector<Listing> saveListings = new Vector<Listing>();
+		for(Listing l : listings)
+		{
+			if(currentListing / totalListings > currentPercent)
+			{
+				System.out.println("Parsing " + Math.round(currentPercent*100) + "% done.");
+				currentPercent += percentMessage;
+			}
+			try {
+				
+				if(db.is_unique(l, saveListings, true))
+				{
+					saveListings.add(l);
+				}
+				else
+				{
+					System.out.println("Duplicate!");
+				}
+			} catch (SQLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
+		db.deleteOldListings();
+		db.saveSerialListings(saveListings);
+		return saveListings;
+
+	}
+	public static void genHtml(Vector<Listing> listings, int max_results)
+	{
+		String fileName = "craigslist-result.html";
+	    String header = "<html><body><h1>Wagon Finder</h1>";
+	    String footer = "</body></html>";
+	    BufferedWriter writer;
+		try {
+			writer = new BufferedWriter(new FileWriter(fileName));
+			writer.append(header);
+			for(int i = 0; i < Math.min(listings.size(), max_results); i++)
+			{
+				Listing listing = listings.get(i);
+				writer.append("<br><a target=\"_blank\" href=\"");
+				writer.append(listing.url);
+				writer.append("\">" + listing.region + " " + listing.getValue() + " - " + listing.title + "</a>");
+			}
+		    writer.append(footer);
+		     
+		    writer.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
 	}
 	public static void main(String[] args) {
 		// Regions to search
 		// ex: monterey, sfbay, losangeles, orangecounty
 		// bakersfield, sacramento, slo, sandiego
-//		String[] regions = {"sfbay"};
 		String[] regions = {"losangeles", "orangecounty", 
 				"monterey", "sfbay", "sacramento",
 				"bakersfield", "slo", "sandiego"};
 
 		// search query (words you type into the search bar)
-//		String[] queries = {"sportwagen", "sportwagon", "jetta wagon", "wagon", "dodge magnum",
-//				"srt8", "325it", "328it", "328i", "325i", "bmw 328", "bmw 325", "e46 wagon",
-//				"328", "bmw touring", "bmw estate", "vw wagon", "volkswagen wagon", "vw jsw",
-//				"jsw", "golf wagon", "audi avant", "audi wagon", "subaru legacy wagon", 
-//				"legacy wagon", "legacy gt wagon", "mercedes wagon", "mercedes estate",
-//				"subaru wagon", "impreza wagon", "wrx wagon"};
-		String[] queries = {"sportwagen", "sportwagon", "jetta wagon", "vw wagon", "wolkwagen wagon",
+		// , "audi avant", "audi wagon", "subaru legacy wagon", 
+//		"legacy wagon", "legacy gt wagon", "mercedes wagon", "mercedes estate",
+//		"subaru wagon", "impreza wagon", "wrx wagon"
+//		, "dodge magnum",
+//		"srt8", "325it", "328it", "328i", "325i", "bmw 328", "bmw 325", "e46 wagon",
+//		"328", "bmw touring", "bmw estate", "vw wagon", "volkswagen wagon", 
+		String[] queries = {"sportwagen", "sportwagon", "jetta wagon", "vw wagon", "volkswagen wagon",
 				"wagon", "sportswagen", "sportswagon", "jsw"};
+//		String[] queries = {"sportwagen", "wagon"};
 		// pages to get per query
+		if(args.length == 1)
+		{
+			try {
+				MAX_REQUESTS_PER_RUN = Integer.parseInt(args[0]);
+			} catch (NumberFormatException e) {
+				System.out.println("Invalid argument for MAX_REQUESTS_PER_RUN");
+				e.printStackTrace();
+			}
+		}
 		int pages = 1;
-		int max_results = 50000;
 		// initialize the database
 		init();
+		Vector<Listing> listings;
 		// pull new listings from craigslist? (false to use ones from DB)
 		boolean getNewListings = true;
 		if(getNewListings)
@@ -258,90 +318,74 @@ public class FetchListings {
 			System.out.println("Generated " + searchPages.size() + " search pages.");
 			Vector<String> listingUrls = searchPageToListingUrl(searchPages);
 			System.out.println("Generated " + listingUrls.size() + " listings.");
-			Vector<Listing> listings = urlsToListings(listingUrls);
+			listings = urlsToListings(listingUrls);
 			System.out.println("Created " + listings.size() + " listings.");
 			db.createSerialListingTable();
-			db.saveSerialListings(listings);
+			// db.saveSerialListings(listings);
 		}
+		else
+		{
+			listings = db.loadSerialListings();
 
-		Vector<Listing> listings = db.loadSerialListings();
-		System.out.println("Loaded listings from DB");
+		}
+		//listings = makeUnique(listings);
+		System.out.println("Loaded " + Integer.toString(listings.size()) + " listings from DB");
 		for(Listing listing : listings)
 		{
 			listing.set_sportwagen_value();
 		}
-		System.out.println("Done settings values.");
+		System.out.println("Done setting values.");
 		// sort by value (highest first)
 		listings.sort(new ValueSorter());
 		Collections.reverse(listings);
-		if(DEV_MODE)
+		
+
+		Vector<Listing> dbListings = null;
+		if(getNewListings)
 		{
-			String fileName = "craigslist-result.html";
-		    String header = "<html><body><h1>Wagon Finder</h1>";
-		    String footer = "</body></html>";
-		    BufferedWriter writer;
-			try {
-				writer = new BufferedWriter(new FileWriter(fileName));
-				writer.append(header);
-				for(int i = 0; i < Math.min(listings.size(), max_results); i++)
-				{
-					Listing listing = listings.get(i);
-					writer.append("<br><a target=\"_blank\" href=\"");
-					writer.append(listing.url);
-					writer.append("\">" + listing.getValue() + " - " + listing.title + "</a>");
-				}
-			    writer.append(footer);
-			     
-			    writer.close();
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+			dbListings = db.loadSerialListings();
 		}
 		Vector<Listing> goodListings = new Vector<Listing>();
-		Vector<String> goodListingUrls = new Vector<String>();
         Vector<String> allListingUrls = new Vector<String>();
 		for(Listing listing : listings)
 		{
-        	if(!db.all_urls.contains(listing.url))
-        	{
-            	allListingUrls.add(listing.url);
-    			if(listing.value > 1.5f)
-    			{
-    				goodListings.add(listing);
-    				db.save_listing(listing);
-    				goodListingUrls.add(listing.url);
-    			}
-        	}
-
-		}
-		db.save_listing_urls(allListingUrls);
-		send_new_listings(goodListings);
-		
-		if(!DEV_MODE)
-		{
-			String fileName = "craigslist-result.html";
-		    String header = "<html><body><h1>Wagon Finder</h1>";
-		    String footer = "</body></html>";
-		    BufferedWriter writer;
-			try {
-				writer = new BufferedWriter(new FileWriter(fileName));
-				writer.append(header);
-				for(int i = 0; i < Math.min(goodListings.size(), max_results); i++)
-				{
-					Listing listing = goodListings.get(i);
-					writer.append("<br><a target=\"_blank\" href=\"");
-					writer.append(listing.url);
-					writer.append("\">" + listing.getValue() + " - " + listing.title + "</a>");
+        	allListingUrls.add(listing.url);
+			if(listing.value >= 0.f)
+			{
+				try {
+					if(dbListings == null || db.is_unique(listing, dbListings, true))
+					{
+						System.out.println(listing);
+						goodListings.add(listing);
+						if(dbListings != null)
+							dbListings.add(listing);
+						db.save_listing(listing);
+					}
+				} catch (SQLException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
-			    writer.append(footer);
-			     
-			    writer.close();
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
 			}
 		}
+		if(getNewListings)
+		{
+			// if we found a duplicate with higher score we replace
+			// it in dbListings, so instead of deleting one
+			// and replacing it, we just delete all
+			// add the new ones to a vector
+			// and save all, it should never be TOO many
+			// because we only save good ones
+			db.deleteOldListings();
+			db.saveSerialListings(dbListings);
+			db.save_listing_urls(allListingUrls);
+			db.log_num_requests(existing_requests);
+		}
+
+		if(!DEV_MODE)
+		{
+			send_new_listings(goodListings);
+		}
+		//genHtml(goodListings, 1000);
 		System.out.println("Done");
     }
 }
