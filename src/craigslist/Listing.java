@@ -287,15 +287,20 @@ public class Listing implements Serializable {
 			}
 		}
 		value += bad_key_val;
+		bad_key_val = 0f;
 		for(String key : bad_keywords) 
 		{
-			if(title.contains(key) || attr_make_model.contains(key)
-					|| content.contains(key))
-				value -= 1.f;
+			if(title.contains(key) || attr_make_model.contains(key))
+				bad_key_val -= 1.f;
+			if(bad_key_val < -2)
+			{
+				break;
+			}
 		}
+		value += bad_key_val;
 		if(attr_transmission.contains("automatic"))
 			value -= 2f;
-		if(price < 10000 && price > 0)
+		if(price < 10000 && price > 1001)
 		{
 			value += 1.f;
 		}

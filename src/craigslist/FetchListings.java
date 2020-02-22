@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.sql.SQLException;
+import java.text.SimpleDateFormat;
 import java.util.Vector;
 
 import org.jsoup.Jsoup;
@@ -23,6 +24,8 @@ public class FetchListings {
 	static int MAX_REQUESTS_PER_RUN = 1000;
 	static boolean DEV_MODE = false;
 	static boolean GEN_HTML = false;
+	static boolean GET_NEW_LISTINGS = true;
+
 	static ListingDB db;
 	static Vector<Listing> listings = new Vector<Listing>();
 	static Vector<SearchPage> search_pages = new Vector<SearchPage>();
@@ -208,13 +211,16 @@ public class FetchListings {
 	{
 		if(goodListings.size() > 0)
 		{
+			Date now = new Date();
+			SimpleDateFormat dateFormat = new SimpleDateFormat("E");
+			dateFormat.setTimeZone(TimeZone.getDefault());
 			String body = "New Sportwagen Listings: \n";
 			for(Listing goodListing : goodListings)
 			{
 				body += goodListing.region + "\n" + goodListing.title + ": " + goodListing.url + "\n";
 			}
 			System.out.println(body);
-			gmail.send_notification("New posts on CraigsList", body);
+			gmail.send_notification("New posts on CraigsList " + dateFormat.format(now), body);
 		}
 	}
 	public static Vector<Listing> makeUnique(Vector<Listing> listings)
@@ -280,20 +286,9 @@ public class FetchListings {
 		// Regions to search
 		// ex: monterey, sfbay, losangeles, orangecounty
 		// bakersfield, sacramento, slo, sandiego
-		String[] regions = {"losangeles", "orangecounty", 
-				"monterey", "sfbay", "sacramento",
-				"bakersfield", "slo", "sandiego"};
-
+		String[] regions = {"sfbay"};
 		// search query (words you type into the search bar)
-		// , "audi avant", "audi wagon", "subaru legacy wagon", 
-//		"legacy wagon", "legacy gt wagon", "mercedes wagon", "mercedes estate",
-//		"subaru wagon", "impreza wagon", "wrx wagon"
-//		, "dodge magnum",
-//		"srt8", "325it", "328it", "328i", "325i", "bmw 328", "bmw 325", "e46 wagon",
-//		"328", "bmw touring", "bmw estate", "vw wagon", "volkswagen wagon", 
-		String[] queries = {"sportwagen", "sportwagon", "jetta wagon", "vw wagon", "volkswagen wagon",
-				"wagon", "sportswagen", "sportswagon", "jsw"};
-//		String[] queries = {"sportwagen", "wagon"};
+		String[] queries = {"wagon"};
 		// pages to get per query
 		if(args.length == 1)
 		{
@@ -309,8 +304,7 @@ public class FetchListings {
 		init();
 		Vector<Listing> listings;
 		// pull new listings from craigslist? (false to use ones from DB)
-		boolean getNewListings = true;
-		if(getNewListings)
+		if(GET_NEW_LISTINGS)
 		{
 			if(DEV_MODE)
 				db.deleteOldListings();
@@ -321,7 +315,9 @@ public class FetchListings {
 			listings = urlsToListings(listingUrls);
 			System.out.println("Created " + listings.size() + " listings.");
 			db.createSerialListingTable();
-			// db.saveSerialListings(listings);
+			if(DEV_MODE)
+				// saves all listings for dev
+				db.saveSerialListings(listings);
 		}
 		else
 		{
@@ -341,7 +337,7 @@ public class FetchListings {
 		
 
 		Vector<Listing> dbListings = null;
-		if(getNewListings)
+		if(GET_NEW_LISTINGS)
 		{
 			dbListings = db.loadSerialListings();
 		}
@@ -367,7 +363,7 @@ public class FetchListings {
 				}
 			}
 		}
-		if(getNewListings)
+		if(GET_NEW_LISTINGS)
 		{
 			// if we found a duplicate with higher score we replace
 			// it in dbListings, so instead of deleting one
@@ -385,7 +381,8 @@ public class FetchListings {
 		{
 			send_new_listings(goodListings);
 		}
-		//genHtml(goodListings, 1000);
+		if(GEN_HTML)
+			genHtml(goodListings, 1000);
 		System.out.println("Done");
     }
 }
