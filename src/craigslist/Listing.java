@@ -190,7 +190,7 @@ public class Listing implements Serializable {
 		String [] good_keywords = {"one owner", "one-owner", "1-owner", "1 owner",
 				"clean title", "low miles", "clean", "service records", "service history"};
 		
-		String good_title[] = {"2010", "2011", "2012", "2013", "2014"};
+		String good_title[] = {"1998", "1999", "2000", "2001", "2002", "2003", "2004", "2005"};
 		
 		String [] man_trans_keys = {"manual transmission", "6 speed manual", "manual", "6 speed", "6-speed",
 				"6mt", "six speed", "stick shift", "manual trans", "transmission manual", "transmission: manual"};
@@ -305,6 +305,140 @@ public class Listing implements Serializable {
 			value += 1.f;
 		}
 		if(price > 14000)
+		{
+			value = -1.f;
+			return value;
+		}
+		return value;
+	}
+	public float set_miata_value()
+	{
+		String[] models = {"miata", "mx5", "mx-5", "mx 5"};
+		
+		String [] unwanted_models = {"toyota", "kia", "scion", "lincoln", "ford", "mini cooper",
+				"buick", "chrysler", "nissan", "r350", "dodge ram", "brz", 
+				"challenger", "chevrolet", "x3", "porsche", "forester", "mini clubman",
+				"cooper", "lexus", "chevy", "chevrolet",
+				"fiat", "infiniti", "hyundai", "suzuki", "jeep", "dodge"};
+		
+		String [] good_keywords = {"one owner", "one-owner", "1-owner", "1 owner",
+				"clean title", "low miles", "clean", "service records", "service history"};
+		
+		String good_title[] = {"2010", "2011", "2012", "2013", "2014"};
+		
+		String [] man_trans_keys = {"manual transmission", "6 speed manual", "manual", "6 speed", "6-speed",
+				"6mt", "six speed", "stick shift", "manual trans", "transmission manual", "transmission: manual"};
+		
+		String [] man_trans_title = {"6sp", "6speed", "6 speed", "manual", "6 sp", "six speed", "6-sp",
+				"6-speed", "6mt", "6m"};
+		
+		String [] bad_keywords = {"dsg", "salvage", "rebuilt", "sedan", "sdn", "automatic",
+				"tiptronic", "automatic transmission", "salvage title", "6a", "transmission: automatic",
+				"automatic 6-speed", "6 speed auto", "auto trans", "a/t", "6-speed a/t",
+				"auto 6-spd", "tptrnc", "suv", "coupe", "transmission : automatic"};
+		content = content.split("keyword")[0];
+		if(attr_title_status == "salvage")
+		{
+			value -= 1.f;
+		}
+		if(attr_odometer > 150000)
+		{
+			value -= 3f;
+		}
+		else if(attr_odometer > 130000)
+		{
+			value -= 2.f;
+		}
+		else if(attr_odometer > 100000)
+		{
+			value -= 1f;
+		}
+		
+		if(title.contains("dsg"))
+		{
+			value -= 3.f;
+		}
+		// Remove new subarus
+		for(Integer i = 2008; i < 2020; i++)
+		{
+			if(title.contains(i.toString()) && title.contains("subaru"))
+			{
+				value = -1f;
+				return value;
+			}
+		}
+		
+		for(String key : unwanted_models) 
+		{
+			if(title.contains(key) || attr_make_model.contains(key))
+			{
+				value = -1f;
+				return value;
+			}
+		}
+		for(String key : models) 
+		{
+			if(title.contains(key) || attr_make_model.contains(key))
+				value += 2f;
+		}
+		for(String key : good_title) 
+		{
+			if(title.contains(key) || attr_make_model.contains(key))
+			{
+				value += 1f;
+				break;
+			}
+		}
+		for(String key : man_trans_keys) 
+		{
+			if(title.contains(key) || attr_make_model.contains(key))
+			{
+				value += 1f;
+				break;
+			}
+		}
+		for(String key : man_trans_keys) 
+		{
+			if(content.contains(key))
+			{
+				value += .5f;
+				break;
+			}
+		}
+		for(String key : good_keywords) 
+		{
+			if(content.contains(key))
+				value += 1.f;
+		}
+		float bad_key_val = 0f;
+		for(String key : bad_keywords) 
+		{
+			if(content.contains(key))
+				bad_key_val -= 1.f;
+			if(bad_key_val < -2)
+			{
+				break;
+			}
+		}
+		value += bad_key_val;
+		bad_key_val = 0f;
+		for(String key : bad_keywords) 
+		{
+			if(title.contains(key) || attr_make_model.contains(key))
+				bad_key_val -= 1.f;
+			if(bad_key_val < -2)
+			{
+				break;
+			}
+		}
+		value += bad_key_val;
+		if(attr_transmission.contains("automatic"))
+			value -= 2f;
+		if(price < 5000 && price > 1001)
+		{
+			value += 1.f;
+		}
+		if(price > 9000)
 		{
 			value = -1.f;
 			return value;

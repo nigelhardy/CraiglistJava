@@ -22,9 +22,9 @@ import org.apache.commons.io.FileUtils;
 public class FetchListings {
 	static int MAX_THREADS = 8;
 	static int MAX_REQUESTS_PER_RUN = 1000;
-	static boolean DEV_MODE = false;
-	static boolean GEN_HTML = false;
-	static boolean GET_NEW_LISTINGS = true;
+	static boolean DEV_MODE = true;
+	static boolean GEN_HTML = true;
+	static boolean GET_NEW_LISTINGS = false;
 
 	static ListingDB db;
 	static Vector<Listing> listings = new Vector<Listing>();
@@ -59,7 +59,7 @@ public class FetchListings {
 	}
 	public static void getListings(SearchPage searchPage, Vector<String> listingUrls)
 	{
-//		System.out.println("Getting " + searchPage.get_url());
+		System.out.println("Getting " + searchPage.get_url());
 		try {
 			Document doc = getDocument(searchPage.get_url());
 			
@@ -261,7 +261,7 @@ public class FetchListings {
 	public static void genHtml(Vector<Listing> listings, int max_results)
 	{
 		String fileName = "craigslist-result.html";
-	    String header = "<html><body><h1>Wagon Finder</h1>";
+	    String header = "<html><body><h1>Miata Finder</h1>";
 	    String footer = "</body></html>";
 	    BufferedWriter writer;
 		try {
@@ -286,9 +286,10 @@ public class FetchListings {
 		// Regions to search
 		// ex: monterey, sfbay, losangeles, orangecounty
 		// bakersfield, sacramento, slo, sandiego
-		String[] regions = {"sfbay"};
+		String[] regions = {"sfbay", "monterey", "losangeles", "orangecounty",
+				"bakersfield", "sacremento", "slo", "sandiego"};
 		// search query (words you type into the search bar)
-		String[] queries = {"wagon"};
+		String[] queries = {"miata", "mx5", "mx-5"};
 		// pages to get per query
 		if(args.length == 1)
 		{
@@ -328,7 +329,7 @@ public class FetchListings {
 		System.out.println("Loaded " + Integer.toString(listings.size()) + " listings from DB");
 		for(Listing listing : listings)
 		{
-			listing.set_sportwagen_value();
+			listing.set_miata_value();
 		}
 		System.out.println("Done setting values.");
 		// sort by value (highest first)
