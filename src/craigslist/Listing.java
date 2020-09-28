@@ -3,6 +3,7 @@ package craigslist;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Comparator;
 
 import org.jsoup.nodes.Document;
@@ -99,7 +100,7 @@ public class Listing implements Serializable {
 				}
 				try
 				{
-					this.price = Float.parseFloat(listing_doc.select(".price").text().replace("$",""));
+					this.price = Float.parseFloat(listing_doc.select(".price").text().replace("$","").replace(",", ""));
 				}
 				catch (Exception e) {
 					this.price = -1f;
@@ -225,7 +226,7 @@ public class Listing implements Serializable {
 			value -= 3.f;
 		}
 		// Remove new subarus
-		for(Integer i = 2008; i < 2020; i++)
+		for(Integer i = 2008; i <= 2020; i++)
 		{
 			if(title.contains(i.toString()) && title.contains("subaru"))
 			{
@@ -326,6 +327,12 @@ public class Listing implements Serializable {
 		
 		String good_title[] = {"2010", "2011", "2012", "2013", "2014"};
 		
+		ArrayList<String> dq_title = new ArrayList<String>();
+		for(Integer year = 2010; year <= 2020; year++)
+		{
+			dq_title.add(year.toString());
+		}
+		
 		String [] man_trans_keys = {"manual transmission", "6 speed manual", "manual", "6 speed", "6-speed",
 				"6mt", "six speed", "stick shift", "manual trans", "transmission manual", "transmission: manual"};
 		
@@ -337,23 +344,40 @@ public class Listing implements Serializable {
 				"automatic 6-speed", "6 speed auto", "auto trans", "a/t", "6-speed a/t",
 				"auto 6-spd", "tptrnc", "suv", "coupe", "transmission : automatic"};
 		content = content.split("keyword")[0];
+		
+		if(attr_transmission.contains("automatic"))
+			value -= 2f;
+		if(!by_owner)
+			value -= 1.5f;
 		if(attr_title_status == "salvage")
 		{
 			value -= 1.f;
 		}
-		if(attr_odometer > 150000)
+		if(attr_odometer > 200000)
+		{
+			value = -1f;
+			return -1f;
+		}
+		else if(attr_odometer > 150000)
 		{
 			value -= 3f;
 		}
 		else if(attr_odometer > 130000)
 		{
-			value -= 2.f;
+			value -= 1.f;
 		}
-		else if(attr_odometer > 100000)
+		else if(attr_odometer < 100000)
 		{
-			value -= 1f;
+			value += 1f;
 		}
-		
+		for(String dq : dq_title)
+		{
+			if(title.contains(dq))
+			{
+				value = -1f;
+				return -1;
+			}
+		}
 		if(title.contains("dsg"))
 		{
 			value -= 3.f;
@@ -367,7 +391,19 @@ public class Listing implements Serializable {
 				return value;
 			}
 		}
-		
+		boolean model_match = false;
+		for(String key : models) 
+		{
+			if(title.contains(key) || attr_make_model.contains(key))
+			{
+				model_match = true;
+			}
+		}
+		if(!model_match)
+		{
+			value = -1f;
+			return -1f;
+		}
 		for(String key : unwanted_models) 
 		{
 			if(title.contains(key) || attr_make_model.contains(key))

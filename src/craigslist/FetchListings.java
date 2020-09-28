@@ -21,10 +21,10 @@ import org.apache.commons.io.FileUtils;
 
 public class FetchListings {
 	static int MAX_THREADS = 8;
-	static int MAX_REQUESTS_PER_RUN = 1000;
-	static boolean DEV_MODE = true;
-	static boolean GEN_HTML = true;
-	static boolean GET_NEW_LISTINGS = false;
+	static int MAX_REQUESTS_PER_RUN = 250;
+	static boolean DEV_MODE = false;
+	static boolean GEN_HTML = false;
+	static boolean GET_NEW_LISTINGS = true;
 
 	static ListingDB db;
 	static Vector<Listing> listings = new Vector<Listing>();
@@ -62,8 +62,7 @@ public class FetchListings {
 		System.out.println("Getting " + searchPage.get_url());
 		try {
 			Document doc = getDocument(searchPage.get_url());
-			
-			Elements results = doc.select("p.result-info");
+			Elements results = doc.select("div.result-info");
 			for (Element p_elem : results) 
 	        {
 				Elements res_links = p_elem.select("a.result-title");
@@ -214,10 +213,11 @@ public class FetchListings {
 			Date now = new Date();
 			SimpleDateFormat dateFormat = new SimpleDateFormat("E");
 			dateFormat.setTimeZone(TimeZone.getDefault());
-			String body = "New Sportwagen Listings: \n";
+			String body = "New Miata Listings: \n";
 			for(Listing goodListing : goodListings)
 			{
-				body += goodListing.region + "\n" + goodListing.title + ": " + goodListing.url + "\n";
+				body += goodListing.region + "\n" + goodListing.title + "($" +
+						Float.toString(goodListing.price) + "): " + goodListing.url + "\n";
 			}
 			System.out.println(body);
 			gmail.send_notification("New posts on CraigsList " + dateFormat.format(now), body);
@@ -272,7 +272,8 @@ public class FetchListings {
 				Listing listing = listings.get(i);
 				writer.append("<br><a target=\"_blank\" href=\"");
 				writer.append(listing.url);
-				writer.append("\">" + listing.region + " " + listing.getValue() + " - " + listing.title + "</a>");
+				writer.append("\">" + listing.region + " " + listing.getValue() + " - "
+						+ listing.title + " " + Float.toString(listing.price) + "</a>");
 			}
 		    writer.append(footer);
 		     
@@ -287,7 +288,7 @@ public class FetchListings {
 		// ex: monterey, sfbay, losangeles, orangecounty
 		// bakersfield, sacramento, slo, sandiego
 		String[] regions = {"sfbay", "monterey", "losangeles", "orangecounty",
-				"bakersfield", "sacremento", "slo", "sandiego"};
+				"bakersfield", "sacramento", "slo", "sandiego"};
 		// search query (words you type into the search bar)
 		String[] queries = {"miata", "mx5", "mx-5"};
 		// pages to get per query
