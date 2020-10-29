@@ -3,8 +3,8 @@ package craigslist;
 public class SearchPage {
 	enum Category 
 	{ 
-	    CARS_AND_TRUCKS, BICYCLES; 
-	} 
+	    CARS_AND_TRUCKS, BICYCLES, ALL; 
+	}
 	String region;
 	String query;
 	Integer page;
@@ -29,6 +29,6 @@ public class SearchPage {
 	}
 	public String generate_url(String categoryKey)
 	{
-		return "https://" + region + ".craigslist.org/search/" + categoryKey + "?s=" + page.toString() + "&sort=date&query=" + query;
+		return "https://" + region + ".craigslist.org/search/" + categoryKey + "?s=" + page.toString() + "&sort=rel&query=" + query;
 	}
 }

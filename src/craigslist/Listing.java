@@ -17,15 +17,22 @@ public class Listing implements Serializable {
 	LocalDateTime date;
 	@Override
 	public String toString() {
-		return "Listing [date=" + date + ", title=" + title + ", content=" + content + ", attr_make_model="
+		return "Listing [" + " value=" + value + ", title=" + title + ", content=" + content + ", attr_make_model="
 				+ attr_make_model + ", attr_transmission=" + attr_transmission + ", attr_odometer=" + attr_odometer
 				+ ", attr_title_status=" + attr_title_status + ", price=" + price + ", num_images=" + num_images
-				+ ", by_owner=" + by_owner + ", url=" + url + ", region=" + region + ", value=" + value + "]";
+				+ ", adType=" + adType + ", url=" + url + ", region=" + region + ", date=" + date +"]";
 	}
+	enum ListingType 
+	{ 
+	    CarOwner, CarDealer, CarParts, Other; 
+	}
+	ListingType adType;
 	String title = "";
 	String content = "";
 	String attr_make_model = "";
 	String attr_transmission = "";
+	String attr_cylinders = "";
+	String listing_url = "";
 	Integer attr_odometer = -1;
 	String attr_title_status = "";
 	Float price = -1f;
@@ -49,19 +56,25 @@ public class Listing implements Serializable {
 	{
 		Elements title = listing_doc.select("#titletextonly");
 		Elements content = listing_doc.select("#postingbody");
-		String listing_url = listing_doc.baseUri();
+		listing_url = listing_doc.baseUri();
 		String region = listing_url.split("//")[1].split("\\.")[0];
 		this.region = region;
+		
 		if(listing_url.contains("/cto/"))
 		{
-			// cto is craiglist abrev for cars/trucks by owner
-			// ctd is dealership
-			// cta in search is all
-			this.by_owner = true;
+			adType = ListingType.CarOwner;
+		}
+		else if(listing_url.contains("/pts/"))
+		{
+			adType = ListingType.CarParts;
+		}
+		else if(listing_url.contains("/ctd/"))
+		{
+			adType = ListingType.CarDealer;
 		}
 		else
 		{
-			this.by_owner = false;
+			adType = ListingType.Other;
 		}
 		
 		if(title.size() > 0)
@@ -71,7 +84,10 @@ public class Listing implements Serializable {
 				this.title = title.text().toLowerCase();
 				this.content = content.text().replace(content.select(".print-qrcode-label").text(), "").trim().toLowerCase();
 				Elements attributes = listing_doc.select("p.attrgroup:gt(0)").select("span");
-				this.attr_make_model = listing_doc.select("p.attrgroup span").get(0).text();
+				if(listing_url.contains("/cta/") || listing_url.contains("/ctd/"))
+				{
+					this.attr_make_model = listing_doc.select("p.attrgroup span").get(0).text();
+				}
 				this.url = listing_url;		
 				DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
 				LocalDateTime formatDateTime = LocalDateTime.parse(listing_doc.select(".date[datetime]").attr("datetime"), formatter);
@@ -96,6 +112,10 @@ public class Listing implements Serializable {
 					{
 						this.frame_size = attr[1].trim();
 					}
+					if(attr[0].toLowerCase().equals("cylinders"))
+					{
+						this.attr_cylinders = attr[1].trim();
+					}
 					
 				}
 				try
@@ -107,13 +127,14 @@ public class Listing implements Serializable {
 				}
 				
 				this.num_images = listing_doc.select(".thumb").size();
-				if(this.determine_value() >= 0)
-				{
-					//save_listing(this);
-				}
+//				if(this.determine_value() >= 0)
+//				{
+//					//save_listing(this);
+//				}
 				
 			}
 			catch (Exception e) {
+				e.printStackTrace();
 				System.out.println("Couldn't parse listing.");
 			}
 			
@@ -124,6 +145,72 @@ public class Listing implements Serializable {
 		value = (float) i;
 		return value;
 	}
+	public void changeValue(ArrayList<String> keys, Float points, String text)
+	{
+		for(String key : keys)
+		{
+			changeValue(key, points, text);
+		}
+	}
+	public void changeValue(String[] keys, Float points, String text)
+	{
+		for(String key : keys)
+		{
+			changeValue(key, points, text);
+		}
+	}
+	public void changeValue(String key, Float points, String text)
+	{
+		if(text.contains(key))
+		{
+			value += points;
+		}
+	}
+	public Boolean containsKeys(String[] keys, String text)
+	{
+		for(String key : keys)
+		{
+			if(text.contains(key))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+	public Boolean containsKeys(ArrayList<String> keys, String text)
+	{
+		for(String key : keys)
+		{
+			if(text.contains(key))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+	public void disqualify(String[] keys, String text) throws Exception
+	{
+		for(String key : keys)
+		{
+			disqualify(key, text);
+		}
+	}
+	public void disqualify(ArrayList<String> keys, String text) throws Exception
+	{
+		for(String key : keys)
+		{
+			disqualify(key, text);
+		}
+	}
+	public void disqualify(String key, String text) throws Exception
+	{
+		if(text.contains(key))
+		{
+			value = -1f;
+			throw new Exception("Disqualify Listing!");
+		}
+	}
+	
 	public float set_bicycle_value()
 	{
 		String [] good_title= {"specialized", "gary fisher", "santa cruz", "trek", "xt", "lx", "shimano", "hardtail"};
@@ -312,6 +399,270 @@ public class Listing implements Serializable {
 		}
 		return value;
 	}
+	public float set_m62_value()
+	{
+		value = 0f;
+		try {
+			content = content.split("keyword")[0];
+			Boolean already_categorized = false;
+			String [] unwanted_models = {"audi", "honda", "subaru", "hummer", "acura",
+					"gmc", "toyota", "kia", "scion", "lincoln", "ford", "mini cooper",
+					"buick", "chrysler", "nissan", "mercedes", "r350", "dodge ram", "brz", 
+					"challenger", "chevrolet", "cadillac", "porsche", "forester", "mini clubman",
+					"cooper", "lexus", "chevy", "chevrolet", "volvo", "kubota", "volkswagen",
+					"fiat", "infiniti", "hyundai", "suzuki", "jeep", "dodge",
+					"e90", "3 series", "x6", "mazda", "bentley", "polaris",
+					"yamaha", "sprinter", "tractor", "maserati", "lr3", "jaguar",
+					"discovery", "335i", "mustang", "lamborghini", "z4", "plymouth",
+					"745i", "freelander", "supercharged", "545i", "535i", "330i", "745li",
+					"z3"};
+			disqualify(unwanted_models, title);
+			disqualify(unwanted_models, attr_make_model);
+			
+			String [] goodstuff = {"parts car", "parting out", "for parts", "collision", "m62b44", "m62tu", "new engine",
+					"4.4", "v8", "v-8", "runs strong", "runs good", "bad transmission", "mechanic", "special", "running",
+					"chain guides", "timing chain", "engine good", "pulls hard", "damage", "crash", "salvage"};
+			changeValue(goodstuff, 4f, content);
+
+			if(adType == ListingType.CarOwner)
+			{
+				value += 3f;
+			}
+			else if(adType == ListingType.CarParts)
+			{
+				value += 1;
+			}
+			else if(adType == ListingType.CarDealer)
+			{
+				value -= 1f;
+			}
+			else if(adType == ListingType.Other)
+			{
+
+			}
+			if(this.price > 12000)
+				value -= 5f;
+			if(this.price > 7000)
+				value -= 3f;
+			else if(this.price > 5000)
+				value -= 1.5f;
+			else if(this.price < 3000)
+				value += 1f;
+			if(title.contains("e46"))
+			{
+				value -= 3f;
+			}
+			
+			if(title.contains("parts/service/mods by a true bmw enthusiast") ||
+					title.contains("mobile programming diagnose") ||
+					title.contains("mobile programming diagnose"))
+			{
+				throw new Exception("Part/service/mods guys must go!");
+			}
+
+			ArrayList<String> all_avoid_years = new ArrayList<String>();
+			for (Integer i = 2007; i <= 2020; i++) {
+				all_avoid_years.add(i.toString());
+			}
+			for (Integer i = 1980; i <= 1994; i++) {
+				all_avoid_years.add(i.toString());
+			}
+			ArrayList<String> avoid_7s_years = new ArrayList<String>();
+			for (Integer i = 1990; i <= 1998; i++) {
+				avoid_7s_years.add(i.toString());
+			}
+			for (Integer i = 2002; i <= 2020; i++) {
+				avoid_7s_years.add(i.toString());
+			}
+			avoid_7s_years.add("95 ");
+			avoid_7s_years.add("96 ");
+			avoid_7s_years.add("97 ");
+			avoid_7s_years.add("98 ");
+			ArrayList<String> good_7s_years = new ArrayList<String>();
+			for (Integer i = 1999; i <= 2001; i++) {
+				good_7s_years.add(i.toString());
+			}
+			good_7s_years.add("99 ");
+			good_7s_years.add("00 ");
+			good_7s_years.add("01 ");
+
+			disqualify(all_avoid_years, title);
+			disqualify(all_avoid_years, attr_make_model);
+			if(attr_odometer > 200000)
+			{
+				throw new Exception("Mileage too high!");
+			}
+			else if(attr_odometer > 150000)
+			{
+				value -= 2f;
+			}
+			else if(attr_odometer > 130000)
+			{
+				value += 1.f;
+			}
+			else if(attr_odometer < 100000)
+			{
+				value += 1f;
+			}
+
+			/////////////////////////////////740
+			String[] sevenSeries = {"740", "e38", "7 series"};
+			if(containsKeys(sevenSeries, title) || containsKeys(sevenSeries, attr_make_model))
+			{
+
+				already_categorized = true;
+				value += 1f;
+				Boolean good_year_found = false;
+				for(String year : good_7s_years)
+				{
+					if(title.contains(year) || attr_make_model.contains(year))
+					{
+						if((containsKeys(good_7s_years, title) && containsKeys(sevenSeries, title)) ||
+								(containsKeys(good_7s_years, attr_make_model) && containsKeys(sevenSeries, title)))
+						{
+							value += 5f;
+						}
+						value += 3f;
+						good_year_found = true;
+						break;
+					}
+				}
+				for(String year : avoid_7s_years)
+				{
+					if(title.contains(year) || attr_make_model.contains(year))
+					{
+						if(!good_year_found)
+						{
+							throw new Exception("740 with bad year, and no good year");
+						}
+					}
+				}
+			}
+			String[] fiveSeries = {"540", "e39", "5 series"};
+			ArrayList<String> good_5s_years = new ArrayList<String>();
+			for (Integer i = 1999; i <= 2003; i++) {
+				good_5s_years.add(i.toString());
+			}
+			good_5s_years.add("99 ");
+			good_5s_years.add("00 ");
+			good_5s_years.add("01 ");
+			good_5s_years.add("02 ");
+			good_5s_years.add("03 ");
+			ArrayList<String> bad_5s_years = new ArrayList<String>();
+			for (Integer i = 1985; i <= 1998; i++) {
+				bad_5s_years.add(i.toString());
+			}
+			for (Integer i = 2004; i <= 2010; i++) {
+				bad_5s_years.add(i.toString());
+			}
+			bad_5s_years.add("95 ");
+			bad_5s_years.add("96 ");
+			bad_5s_years.add("97 ");
+			bad_5s_years.add("98 ");
+			String[] closeButNotOkay = {"e60", "550i", "528i", "530i", "525i", "m5", "z3", "645ci", "x3", "325i", "328i", "750i"};
+			String[] acceptables = {"540", "e38", "e39", "740", "range rover", "x5", "e53"};
+			if(!(containsKeys(acceptables, title) || containsKeys(acceptables, attr_make_model))
+					&& (containsKeys(closeButNotOkay, title) || containsKeys(closeButNotOkay, attr_make_model)))
+			{
+				throw new Exception("Not a car we want, but close!");
+			}
+			if(containsKeys(fiveSeries, title) || containsKeys(fiveSeries, attr_make_model))
+			{
+				value += 1f;
+				Boolean good_year_found = false;
+				for(String year : good_5s_years)
+				{
+					if(title.contains(year) || attr_make_model.contains(year))
+					{
+						if((containsKeys(good_5s_years, title) && containsKeys(fiveSeries, title)) ||
+								(containsKeys(good_5s_years, attr_make_model) && containsKeys(fiveSeries, title)))
+						{
+							value += 5f;
+						}
+						good_year_found = true;
+						value += 3f;
+						break;
+					}
+				}
+				for(String year : bad_5s_years)
+				{
+					if(title.contains(year) || attr_make_model.contains(year))
+					{
+						if(!good_year_found)
+						{
+							value -= 3f;
+							break;
+						}
+					}
+				}
+			}
+			String[] x5model = {"x5", "e53"};
+			ArrayList<String> good_x5s_years = new ArrayList<String>();
+			for (Integer i = 1999; i <= 2003; i++) {
+				good_x5s_years.add(i.toString());
+			}
+			good_x5s_years.add("01 ");
+			good_x5s_years.add("02 ");
+			good_x5s_years.add("03 ");
+
+			ArrayList<String> bad_x5s_years = new ArrayList<String>();
+			for (Integer i = 2004; i <= 2020; i++) {
+				bad_x5s_years.add(i.toString());
+			}
+			bad_x5s_years.add("04 ");
+			bad_x5s_years.add("05 ");
+			bad_x5s_years.add("06 ");
+			// NO cylinders: 6 cylinders
+			String[] x5good = {"4.4", "v8", "m62"};
+			String[] x5bad = {"4.8", "3.0", "6cyl", "6 cyl", "n62", "4.6"};
+			
+			if(containsKeys(x5model, title) || containsKeys(x5model, attr_make_model))
+			{
+				value += 1f;
+				Boolean good_year_found = false;
+				for(String year : good_x5s_years)
+				{
+					if(title.contains(year) || attr_make_model.contains(year))
+					{
+						if((containsKeys(good_x5s_years, title) && containsKeys(x5model, title)) ||
+								(containsKeys(good_x5s_years, attr_make_model) && containsKeys(x5model, title)))
+						{
+							value += 5f;
+						}
+						good_year_found = true;
+						value += 3f;
+						break;
+					}
+				}
+				for(String year : bad_x5s_years)
+				{
+					if(title.contains(year) || attr_make_model.contains(year))
+					{
+						if(!good_year_found)
+						{
+							throw new Exception("Bad years for X5!");
+						}
+					}
+				}
+				changeValue(x5bad, -3f, content);
+				disqualify(x5bad, title);
+				disqualify(x5bad, attr_make_model);
+			}
+			String[] engineKeys = {"m62"};
+			if(containsKeys(engineKeys, title) || containsKeys(engineKeys, attr_make_model) ||
+					containsKeys(engineKeys, content))
+			{
+				String[] alsoneeds = {"engine", "bmw"};
+				if(containsKeys(alsoneeds, content))
+				{
+					value += 2f;
+				}
+			}
+		} catch (Exception e) {
+			value = -1f;
+		}
+		return value;
+	}
 	public float set_miata_value()
 	{
 		String[] models = {"miata", "mx5", "mx-5", "mx 5"};
@@ -347,7 +698,7 @@ public class Listing implements Serializable {
 		
 		if(attr_transmission.contains("automatic"))
 			value -= 2f;
-		if(!by_owner)
+		if(adType != ListingType.CarOwner)
 			value -= 1.5f;
 		if(attr_title_status == "salvage")
 		{

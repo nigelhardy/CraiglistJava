@@ -23,8 +23,18 @@ public class FetchListings {
 	static int MAX_THREADS = 8;
 	static int MAX_REQUESTS_PER_RUN = 250;
 	static boolean DEV_MODE = false;
-	static boolean GEN_HTML = false;
+	static boolean GEN_HTML = true;
 	static boolean GET_NEW_LISTINGS = true;
+	// Regions to search
+	// ex: monterey, sfbay, losangeles, orangecounty
+	// bakersfield, sacramento, slo, sandiego
+	static String[] regions = {"sfbay", "monterey", "losangeles", "orangecounty",
+			"bakersfield", "sacramento", "slo", "sandiego", "inlandempire",
+			"seattle", "portland", "austin"};
+	// search query (words you type into the search bar)
+	static String[] queries = {"m62 engine", "bmw 740", "740i", "740il", "bmw 540", "540i", "540ia", "e39",
+			"e38", "e53", "x5", "x5 4.4", "range rover"};
+	static int pages = 1;
 
 	static ListingDB db;
 	static Vector<Listing> listings = new Vector<Listing>();
@@ -52,7 +62,6 @@ public class FetchListings {
 		try {
 			return Jsoup.connect(url).get();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 			return null;
 		}
@@ -80,14 +89,19 @@ public class FetchListings {
 	}
 	public static Listing parseListing(String listingUrl) throws Exception
 	{
-		Document listingDoc = getDocument(listingUrl);
+		Document listingDoc = null;
 		try
 		{
+			listingDoc = getDocument(listingUrl);
 		    Thread.sleep(250);
 		}
 		catch(InterruptedException ex)
 		{
 		    Thread.currentThread().interrupt();
+		}
+		catch(Exception e)
+		{
+			System.out.println("Unable to parse " + listingUrl);
 		}
 		return new Listing(listingDoc);
 	}
@@ -196,7 +210,8 @@ public class FetchListings {
 				try {
 					Listing l = parseListing(listingUrl);
 					existing_requests++;
-					listings.add(l);		
+					if(l != null)
+						listings.add(l);		
 				} catch (Exception e) {
 					e.printStackTrace();
 				}	
@@ -213,14 +228,14 @@ public class FetchListings {
 			Date now = new Date();
 			SimpleDateFormat dateFormat = new SimpleDateFormat("E");
 			dateFormat.setTimeZone(TimeZone.getDefault());
-			String body = "New Miata Listings: \n";
+			String body = "BMW M62tu Listings: \n";
 			for(Listing goodListing : goodListings)
 			{
 				body += goodListing.region + "\n" + goodListing.title + "($" +
 						Float.toString(goodListing.price) + "): " + goodListing.url + "\n";
 			}
 			System.out.println(body);
-			gmail.send_notification("New posts on CraigsList " + dateFormat.format(now), body);
+			gmail.send_notification("New M62tu posts on CraigsList " + dateFormat.format(now), body);
 		}
 	}
 	public static Vector<Listing> makeUnique(Vector<Listing> listings)
@@ -261,7 +276,7 @@ public class FetchListings {
 	public static void genHtml(Vector<Listing> listings, int max_results)
 	{
 		String fileName = "craigslist-result.html";
-	    String header = "<html><body><h1>Miata Finder</h1>";
+	    String header = "<html><body><h1>M62tu Engine Finder</h1>";
 	    String footer = "</body></html>";
 	    BufferedWriter writer;
 		try {
@@ -284,13 +299,7 @@ public class FetchListings {
 		}
 	}
 	public static void main(String[] args) {
-		// Regions to search
-		// ex: monterey, sfbay, losangeles, orangecounty
-		// bakersfield, sacramento, slo, sandiego
-		String[] regions = {"sfbay", "monterey", "losangeles", "orangecounty",
-				"bakersfield", "sacramento", "slo", "sandiego"};
-		// search query (words you type into the search bar)
-		String[] queries = {"miata", "mx5", "mx-5"};
+
 		// pages to get per query
 		if(args.length == 1)
 		{
@@ -301,7 +310,6 @@ public class FetchListings {
 				e.printStackTrace();
 			}
 		}
-		int pages = 1;
 		// initialize the database
 		init();
 		Vector<Listing> listings;
@@ -310,7 +318,8 @@ public class FetchListings {
 		{
 			if(DEV_MODE)
 				db.deleteOldListings();
-			Vector<SearchPage> searchPages = generateSearchPages(regions, queries, pages, Category.CARS_AND_TRUCKS);
+			Vector<SearchPage> searchPages = generateSearchPages(regions, queries, pages, Category.ALL);
+
 			System.out.println("Generated " + searchPages.size() + " search pages.");
 			Vector<String> listingUrls = searchPageToListingUrl(searchPages);
 			System.out.println("Generated " + listingUrls.size() + " listings.");
@@ -330,7 +339,7 @@ public class FetchListings {
 		System.out.println("Loaded " + Integer.toString(listings.size()) + " listings from DB");
 		for(Listing listing : listings)
 		{
-			listing.set_miata_value();
+			listing.set_m62_value();
 		}
 		System.out.println("Done setting values.");
 		// sort by value (highest first)
@@ -348,7 +357,7 @@ public class FetchListings {
 		for(Listing listing : listings)
 		{
         	allListingUrls.add(listing.url);
-			if(listing.value >= 0.f)
+			if(listing.value >= 7.f)
 			{
 				try {
 					if(dbListings == null || db.is_unique(listing, dbListings, true))
@@ -362,7 +371,11 @@ public class FetchListings {
 				} catch (SQLException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
+				} catch (Exception e)
+				{
+					e.printStackTrace();
 				}
+				
 			}
 		}
 		if(GET_NEW_LISTINGS)
